@@ -7,6 +7,7 @@ import 'prediction/prediction_results_screen.dart'; // or college tab
 import 'wishlist/wishlist_tab.dart';
 import 'analytics/analytics_tab.dart';
 import 'profile/profile_tab.dart';
+import 'premium/premium_screen.dart';
 
 class MainScreen extends StatefulWidget {
   const MainScreen({super.key});
@@ -21,7 +22,7 @@ class _MainScreenState extends State<MainScreen> {
   final List<Widget> _tabs = [
     const HomeTab(),
     const PredictionResultsScreen(), // We'll use this as the Colleges tab for now
-    const WishlistTab(),
+    const PremiumScreen(),
     const AnalyticsTab(),
     const ProfileTab(),
   ];
@@ -61,8 +62,8 @@ class _MainScreenState extends State<MainScreen> {
               label: 'Colleges',
             ),
             BottomNavigationBarItem(
-              icon: Icon(LucideIcons.heart),
-              label: 'Wishlist',
+              icon: Icon(LucideIcons.crown),
+              label: 'Premium',
             ),
             BottomNavigationBarItem(
               icon: Icon(LucideIcons.barChart2),

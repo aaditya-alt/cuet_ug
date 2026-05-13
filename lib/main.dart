@@ -27,18 +27,37 @@ void main() async {
 
 class ThemeProvider with ChangeNotifier {
   final SharedPreferences _prefs;
-  static const String _themeKey = 'isDarkMode';
+  static const String _themeKey = 'themeMode';
   
-  bool _isDarkMode;
+  late ThemeMode _themeMode;
 
-  ThemeProvider(this._prefs) : _isDarkMode = _prefs.getBool(_themeKey) ?? false;
+  ThemeProvider(this._prefs) {
+    final String? themeStr = _prefs.getString(_themeKey);
+    if (themeStr == 'dark') {
+      _themeMode = ThemeMode.dark;
+    } else if (themeStr == 'light') {
+      _themeMode = ThemeMode.light;
+    } else {
+      _themeMode = ThemeMode.system;
+    }
+  }
 
-  bool get isDarkMode => _isDarkMode;
+  ThemeMode get themeMode => _themeMode;
+
+  bool get isDarkMode => _themeMode == ThemeMode.dark;
+
+  void setThemeMode(ThemeMode mode) {
+    _themeMode = mode;
+    _prefs.setString(_themeKey, mode.toString().split('.').last);
+    notifyListeners();
+  }
 
   void toggleTheme() {
-    _isDarkMode = !_isDarkMode;
-    _prefs.setBool(_themeKey, _isDarkMode);
-    notifyListeners();
+    if (_themeMode == ThemeMode.dark) {
+      setThemeMode(ThemeMode.light);
+    } else {
+      setThemeMode(ThemeMode.dark);
+    }
   }
 }
 
@@ -54,7 +73,7 @@ class MyApp extends StatelessWidget {
           debugShowCheckedModeBanner: false,
           theme: AppTheme.lightTheme,
           darkTheme: AppTheme.darkTheme,
-          themeMode: themeProvider.isDarkMode ? ThemeMode.dark : ThemeMode.light,
+          themeMode: themeProvider.themeMode,
           home: const SplashScreen(),
         );
       },

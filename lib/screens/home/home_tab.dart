@@ -6,6 +6,7 @@ import '../../providers/user_score_provider.dart';
 import '../prediction/prediction_results_screen.dart';
 import '../analytics/analytics_tab.dart';
 import '../wishlist/wishlist_tab.dart';
+import '../notifications/notification_screen.dart';
 
 class HomeTab extends StatelessWidget {
   const HomeTab({super.key});
@@ -61,7 +62,12 @@ class HomeTab extends StatelessWidget {
                     ),
                     child: IconButton(
                       icon: const Icon(LucideIcons.bell),
-                      onPressed: () {},
+                      onPressed: () {
+                        Navigator.push(
+                          context,
+                          MaterialPageRoute(builder: (context) => const NotificationScreen()),
+                        );
+                      },
                       color: theme.colorScheme.primary,
                     ),
                   ),

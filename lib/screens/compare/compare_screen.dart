@@ -33,9 +33,19 @@ class CompareScreen extends StatelessWidget {
             _buildComparisonRow('Type', college1.type, college2.type),
             _buildComparisonRow('NIRF Rank', '#${college1.nirfRanking}', '#${college2.nirfRanking}'),
             _buildComparisonRow(
-              'Expected Cutoff\n(Gen - BA/BSc)', 
-              '${college1.courses.first.cutoffs['General']?.expected ?? 0}', 
-              '${college2.courses.first.cutoffs['General']?.expected ?? 0}'
+              'Highest Package', 
+              college1.placementInfo?.highestPackage ?? 'N/A', 
+              college2.placementInfo?.highestPackage ?? 'N/A'
+            ),
+            _buildComparisonRow(
+              'Avg Package', 
+              college1.placementInfo?.averagePackage ?? 'N/A', 
+              college2.placementInfo?.averagePackage ?? 'N/A'
+            ),
+            _buildComparisonRow(
+              'Expected Cutoff', 
+              '${college1.courses.first.cutoffs['General']?.expected2026 ?? 0}', 
+              '${college2.courses.first.cutoffs['General']?.expected2026 ?? 0}'
             ),
           ],
         ),
@@ -50,10 +60,20 @@ class CompareScreen extends StatelessWidget {
           height: 80,
           width: 80,
           decoration: BoxDecoration(
-            color: Theme.of(context).colorScheme.primary.withOpacity(0.1),
+            color: Colors.white,
             shape: BoxShape.circle,
+            border: Border.all(color: Colors.grey.shade100),
+            boxShadow: [
+              BoxShadow(color: Colors.black.withOpacity(0.05), blurRadius: 10, offset: const Offset(0, 4)),
+            ],
           ),
-          child: Icon(Icons.account_balance, color: Theme.of(context).colorScheme.primary, size: 40),
+          child: ClipOval(
+            child: Image.network(
+              college.logoUrl,
+              fit: BoxFit.contain,
+              errorBuilder: (context, error, stackTrace) => Icon(LucideIcons.building, color: Theme.of(context).colorScheme.primary, size: 40),
+            ),
+          ),
         ),
         const SizedBox(height: 16),
         Text(

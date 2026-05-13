@@ -76,10 +76,21 @@ class PredictionResultsScreen extends StatelessWidget {
                           width: 50,
                           height: 50,
                           decoration: BoxDecoration(
-                            color: Colors.grey.shade200,
+                            color: Colors.white,
                             borderRadius: BorderRadius.circular(12),
+                            border: Border.all(color: Colors.grey.shade100),
+                            boxShadow: [
+                              BoxShadow(color: Colors.black.withOpacity(0.05), blurRadius: 4, offset: const Offset(0, 2)),
+                            ],
                           ),
-                          child: const Icon(LucideIcons.building2, color: Colors.grey),
+                          child: ClipRRect(
+                            borderRadius: BorderRadius.circular(12),
+                            child: Image.network(
+                              college.logoUrl,
+                              fit: BoxFit.contain,
+                              errorBuilder: (context, error, stackTrace) => const Icon(LucideIcons.building2, color: Colors.grey),
+                            ),
+                          ),
                         ),
                         const SizedBox(width: 16),
                         Expanded(

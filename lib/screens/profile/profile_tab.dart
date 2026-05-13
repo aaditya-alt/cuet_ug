@@ -3,6 +3,8 @@ import 'package:google_fonts/google_fonts.dart';
 import 'package:lucide_icons/lucide_icons.dart';
 import 'package:provider/provider.dart';
 import '../../main.dart'; // For ThemeProvider
+import '../wishlist/wishlist_tab.dart';
+import '../notifications/notification_screen.dart';
 
 class ProfileTab extends StatelessWidget {
   const ProfileTab({super.key});
@@ -55,14 +57,43 @@ class ProfileTab extends StatelessWidget {
             _buildSectionHeader('Preferences'),
             _buildListTile(
               context,
-              icon: LucideIcons.moon,
-              title: 'Dark Mode',
-              trailing: Switch(
-                value: themeProvider.isDarkMode,
-                onChanged: (val) => themeProvider.toggleTheme(),
+              icon: LucideIcons.palette,
+              title: 'App Theme',
+              trailing: DropdownButton<ThemeMode>(
+                value: themeProvider.themeMode,
+                underline: const SizedBox(),
+                items: const [
+                  DropdownMenuItem(value: ThemeMode.system, child: Text('System')),
+                  DropdownMenuItem(value: ThemeMode.light, child: Text('Light')),
+                  DropdownMenuItem(value: ThemeMode.dark, child: Text('Dark')),
+                ],
+                onChanged: (mode) {
+                  if (mode != null) themeProvider.setThemeMode(mode);
+                },
               ),
             ),
-            _buildListTile(context, icon: LucideIcons.bell, title: 'Notifications'),
+            _buildListTile(
+              context, 
+              icon: LucideIcons.bell, 
+              title: 'Notifications',
+              onTap: () {
+                Navigator.push(
+                  context,
+                  MaterialPageRoute(builder: (context) => const NotificationScreen()),
+                );
+              },
+            ),
+            _buildListTile(
+              context,
+              icon: LucideIcons.heart,
+              title: 'My Wishlist',
+              onTap: () {
+                Navigator.push(
+                  context,
+                  MaterialPageRoute(builder: (context) => const WishlistTab()),
+                );
+              },
+            ),
             _buildListTile(context, icon: LucideIcons.bookmark, title: 'Saved Colleges'),
             
             const SizedBox(height: 24),
@@ -92,7 +123,7 @@ class ProfileTab extends StatelessWidget {
     );
   }
 
-  Widget _buildListTile(BuildContext context, {required IconData icon, required String title, Widget? trailing, Color? color}) {
+  Widget _buildListTile(BuildContext context, {required IconData icon, required String title, Widget? trailing, Color? color, VoidCallback? onTap}) {
     final theme = Theme.of(context);
     return Container(
       margin: const EdgeInsets.only(bottom: 12),
@@ -112,7 +143,7 @@ class ProfileTab extends StatelessWidget {
           ),
         ),
         trailing: trailing ?? const Icon(LucideIcons.chevronRight, size: 20, color: Colors.grey),
-        onTap: trailing == null ? () {} : null,
+        onTap: onTap ?? (trailing == null ? () {} : null),
       ),
     );
   }
