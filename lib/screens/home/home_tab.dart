@@ -6,7 +6,9 @@ import '../../providers/user_score_provider.dart';
 import '../prediction/prediction_results_screen.dart';
 import '../analytics/analytics_tab.dart';
 import '../wishlist/wishlist_tab.dart';
+import '../timeline/csas_timeline_screen.dart';
 import '../notifications/notification_screen.dart';
+import '../counselling/counselling_guide_screen.dart';
 
 class HomeTab extends StatelessWidget {
   const HomeTab({super.key});
@@ -195,6 +197,71 @@ class HomeTab extends StatelessWidget {
               ),
 
               const SizedBox(height: 32),
+              // Admission Guide Banner
+              InkWell(
+                onTap: () {
+                  Navigator.push(
+                    context,
+                    MaterialPageRoute(builder: (context) => const CounsellingGuideScreen()),
+                  );
+                },
+                child: Container(
+                  padding: const EdgeInsets.all(20),
+                  decoration: BoxDecoration(
+                    gradient: LinearGradient(
+                      colors: [theme.colorScheme.primary.withOpacity(0.8), theme.colorScheme.primary],
+                      begin: Alignment.topLeft,
+                      end: Alignment.bottomRight,
+                    ),
+                    borderRadius: BorderRadius.circular(20),
+                    boxShadow: [
+                      BoxShadow(
+                        color: theme.colorScheme.primary.withOpacity(0.3),
+                        blurRadius: 15,
+                        offset: const Offset(0, 8),
+                      ),
+                    ],
+                  ),
+                  child: Row(
+                    children: [
+                      Container(
+                        padding: const EdgeInsets.all(12),
+                        decoration: BoxDecoration(
+                          color: Colors.white.withOpacity(0.2),
+                          shape: BoxShape.circle,
+                        ),
+                        child: const Icon(LucideIcons.graduationCap, color: Colors.white, size: 30),
+                      ),
+                      const SizedBox(width: 16),
+                      Expanded(
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Text(
+                              'Counselling Guide 2026',
+                              style: GoogleFonts.outfit(
+                                color: Colors.white,
+                                fontSize: 18,
+                                fontWeight: FontWeight.bold,
+                              ),
+                            ),
+                            Text(
+                              'Complete roadmap for DU CSAS admissions',
+                              style: GoogleFonts.outfit(
+                                color: Colors.white.withOpacity(0.8),
+                                fontSize: 13,
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                      const Icon(LucideIcons.chevronRight, color: Colors.white),
+                    ],
+                  ),
+                ),
+              ),
+
+              const SizedBox(height: 32),
               Text(
                 'Quick Actions',
                 style: GoogleFonts.outfit(
@@ -212,8 +279,8 @@ class HomeTab extends StatelessWidget {
                   _buildQuickAction(context, LucideIcons.bookOpen, 'Course Cutoffs', Colors.green, onTap: () {
                     Navigator.push(context, MaterialPageRoute(builder: (context) => const AnalyticsTab()));
                   }),
-                  _buildQuickAction(context, LucideIcons.list, 'CSAS Rounds', Colors.orange, onTap: () {
-                    ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('CSAS Rounds feature coming soon')));
+                  _buildQuickAction(context, LucideIcons.calendar, 'Timeline', Colors.orange, onTap: () {
+                    Navigator.push(context, MaterialPageRoute(builder: (context) => const CsasTimelineScreen()));
                   }),
                   _buildQuickAction(context, LucideIcons.heart, 'My Wishlist', Colors.red, onTap: () {
                     Navigator.push(context, MaterialPageRoute(builder: (context) => const WishlistTab()));

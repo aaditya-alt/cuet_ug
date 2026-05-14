@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:lucide_icons/lucide_icons.dart';
 import 'package:provider/provider.dart';
+import '../auth_screen.dart';
 import '../../main.dart'; // For ThemeProvider
 import '../wishlist/wishlist_tab.dart';
 import '../notifications/notification_screen.dart';
@@ -17,9 +18,6 @@ class ProfileTab extends StatelessWidget {
     return Scaffold(
       appBar: AppBar(
         title: const Text('Profile'),
-        actions: [
-          IconButton(icon: const Icon(LucideIcons.settings), onPressed: () {}),
-        ],
       ),
       body: SingleChildScrollView(
         padding: const EdgeInsets.all(24),
@@ -94,13 +92,109 @@ class ProfileTab extends StatelessWidget {
                 );
               },
             ),
-            _buildListTile(context, icon: LucideIcons.bookmark, title: 'Saved Colleges'),
             
             const SizedBox(height: 24),
             _buildSectionHeader('Account'),
-            _buildListTile(context, icon: LucideIcons.shield, title: 'Privacy & Security'),
-            _buildListTile(context, icon: LucideIcons.helpCircle, title: 'Help & Support'),
-            _buildListTile(context, icon: LucideIcons.logOut, title: 'Log Out', color: Colors.red),
+            _buildListTile(
+              context, 
+              icon: LucideIcons.shield, 
+              title: 'Privacy & Security',
+              onTap: () => _showMockBottomSheet(
+                context, 
+                LucideIcons.shield, 
+                'Privacy & Security', 
+                'Your data is protected with end-to-end encryption. We never share your scores with third parties without your permission.\n\n• Biometric Lock: Enabled\n• Data Sync: Active\n• Privacy Mode: Standard'
+              ),
+            ),
+            _buildListTile(
+              context, 
+              icon: LucideIcons.helpCircle, 
+              title: 'Help & Support',
+              onTap: () => _showMockBottomSheet(
+                context, 
+                LucideIcons.helpCircle, 
+                'Help & Support', 
+                'Need help with your preference list or scores?\n\n• Email: support@cuetpredictor.app\n• Response Time: < 2 Hours\n• FAQ: Frequently Asked Questions'
+              ),
+            ),
+            _buildListTile(
+              context, 
+              icon: LucideIcons.logOut, 
+              title: 'Log Out', 
+              color: Colors.red,
+              onTap: () {
+                showDialog(
+                  context: context,
+                  builder: (context) => AlertDialog(
+                    title: const Text('Log Out?'),
+                    content: const Text('Are you sure you want to log out of your account?'),
+                    actions: [
+                      TextButton(onPressed: () => Navigator.pop(context), child: const Text('Cancel')),
+                      TextButton(
+                        onPressed: () {
+                          // Clear navigation stack and go to AuthScreen
+                          Navigator.of(context).pushAndRemoveUntil(
+                            MaterialPageRoute(builder: (context) => const AuthScreen()),
+                            (route) => false,
+                          );
+                        }, 
+                        child: const Text('Log Out', style: TextStyle(color: Colors.red)),
+                      ),
+                    ],
+                  ),
+                );
+              },
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  void _showMockBottomSheet(BuildContext context, IconData icon, String title, String content) {
+    showModalBottomSheet(
+      context: context,
+      shape: const RoundedRectangleBorder(borderRadius: BorderRadius.vertical(top: Radius.circular(30))),
+      builder: (context) => Container(
+        padding: const EdgeInsets.all(32),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Row(
+              children: [
+                Container(
+                  padding: const EdgeInsets.all(12),
+                  decoration: BoxDecoration(
+                    color: Theme.of(context).colorScheme.primary.withOpacity(0.1),
+                    shape: BoxShape.circle,
+                  ),
+                  child: Icon(icon, color: Theme.of(context).colorScheme.primary),
+                ),
+                const SizedBox(width: 16),
+                Text(
+                  title,
+                  style: GoogleFonts.outfit(fontSize: 20, fontWeight: FontWeight.bold),
+                ),
+              ],
+            ),
+            const SizedBox(height: 24),
+            Text(
+              content,
+              style: GoogleFonts.outfit(fontSize: 15, color: Colors.grey.shade600, height: 1.6),
+            ),
+            const SizedBox(height: 32),
+            SizedBox(
+              width: double.infinity,
+              child: ElevatedButton(
+                onPressed: () => Navigator.pop(context),
+                style: ElevatedButton.styleFrom(
+                  padding: const EdgeInsets.symmetric(vertical: 16),
+                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+                ),
+                child: Text('Close', style: GoogleFonts.outfit(fontWeight: FontWeight.bold)),
+              ),
+            ),
           ],
         ),
       ),

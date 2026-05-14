@@ -5,16 +5,39 @@ import 'package:fl_chart/fl_chart.dart';
 import '../../models/college_model.dart';
 import 'package:provider/provider.dart';
 import '../../providers/wishlist_provider.dart';
+import '../../providers/compare_provider.dart';
+import '../compare/compare_screen.dart';
 
-class CollegeDetailsScreen extends StatelessWidget {
+import 'package:share_plus/share_plus.dart';
+
+class CollegeDetailsScreen extends StatefulWidget {
   final CollegeModel college;
 
   const CollegeDetailsScreen({super.key, required this.college});
 
   @override
+  State<CollegeDetailsScreen> createState() => _CollegeDetailsScreenState();
+}
+
+class _CollegeDetailsScreenState extends State<CollegeDetailsScreen> {
+  late String _selectedCategory;
+  late CourseCutoff _selectedCourse;
+
+  CollegeModel get college => widget.college;
+
+  @override
+  void initState() {
+    super.initState();
+    _selectedCategory = 'General';
+    _selectedCourse = widget.college.courses.first;
+  }
+
+  @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
     final wishlistProvider = Provider.of<WishlistProvider>(context);
+    final compareProvider = Provider.of<CompareProvider>(context);
+    final college = widget.college;
 
     return Scaffold(
       body: CustomScrollView(
@@ -55,7 +78,7 @@ class CollegeDetailsScreen extends StatelessWidget {
                   const SizedBox(height: 32),
                   _buildHostel(theme),
                   const SizedBox(height: 32),
-                  _buildCutoffTrends(theme),
+                  _buildCutoffDetails(theme),
                   const SizedBox(height: 100), // Space for bottom bar
                 ],
               ),
@@ -63,7 +86,7 @@ class CollegeDetailsScreen extends StatelessWidget {
           ),
         ],
       ),
-      bottomNavigationBar: _buildBottomBar(context, theme, wishlistProvider),
+      bottomNavigationBar: _buildBottomBar(context, theme, wishlistProvider, compareProvider),
     );
   }
 
@@ -106,7 +129,15 @@ class CollegeDetailsScreen extends StatelessWidget {
         ),
         IconButton(
           icon: const Icon(LucideIcons.share2, color: Colors.white),
-          onPressed: () {},
+          onPressed: () {
+            final String text = 'Check out ${college.name} on Cuet Predictor!\n\n'
+                '📍 Campus: ${college.campus}\n'
+                '🏆 NIRF Rank: #${college.nirfRanking}\n'
+                '🎓 Courses: ${college.courses.map((c) => c.courseName).take(3).join(", ")}...\n\n'
+                'Open in App: cuet://college/${college.id}\n'
+                'Or view on Web: https://cuetpredictor.app/college/${college.id}';
+            Share.share(text);
+          },
         ),
       ],
     );
@@ -340,6 +371,231 @@ class CollegeDetailsScreen extends StatelessWidget {
     );
   }
 
+  Widget _buildCutoffDetails(ThemeData theme) {
+    final categories = ['General', 'OBC', 'SC', 'ST', 'EWS'];
+    final cutoffData = _selectedCourse.cutoffs[_selectedCategory];
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        _buildSectionTitle('Cutoff Insights'),
+        const SizedBox(height: 16),
+        
+        // Course Selector
+        Container(
+          padding: const EdgeInsets.symmetric(horizontal: 16),
+          decoration: BoxDecoration(
+            color: theme.brightness == Brightness.dark ? Colors.white.withOpacity(0.05) : Colors.grey.shade100,
+            borderRadius: BorderRadius.circular(12),
+            border: Border.all(color: theme.dividerColor),
+          ),
+          child: DropdownButtonHideUnderline(
+            child: DropdownButton<CourseCutoff>(
+              isExpanded: true,
+              value: _selectedCourse,
+              items: widget.college.courses.map((course) {
+                return DropdownMenuItem(
+                  value: course,
+                  child: Text(course.courseName, style: GoogleFonts.outfit(fontSize: 15)),
+                );
+              }).toList(),
+              onChanged: (val) {
+                if (val != null) setState(() => _selectedCourse = val);
+              },
+            ),
+          ),
+        ),
+        const SizedBox(height: 16),
+
+        // Category Selector (Horizontal Chips)
+        SingleChildScrollView(
+          scrollDirection: Axis.horizontal,
+          child: Row(
+            children: categories.map((cat) {
+              final isSelected = _selectedCategory == cat;
+              return Padding(
+                padding: const EdgeInsets.only(right: 8),
+                child: ChoiceChip(
+                  label: Text(cat),
+                  selected: isSelected,
+                  onSelected: (selected) {
+                    if (selected) setState(() => _selectedCategory = cat);
+                  },
+                  selectedColor: theme.colorScheme.primary,
+                  labelStyle: GoogleFonts.outfit(
+                    color: isSelected ? Colors.white : theme.textTheme.bodyMedium?.color,
+                    fontWeight: isSelected ? FontWeight.bold : FontWeight.normal,
+                  ),
+                ),
+              );
+            }).toList(),
+          ),
+        ),
+        const SizedBox(height: 24),
+
+        if (cutoffData != null) ...[
+          // Round-wise Stats
+          Row(
+            children: [
+              _buildRoundCard('Round 1', cutoffData.round1.toStringAsFixed(0), theme),
+              const SizedBox(width: 12),
+              _buildRoundCard('Round 2', cutoffData.round2.toStringAsFixed(0), theme),
+              const SizedBox(width: 12),
+              _buildRoundCard('Round 3', cutoffData.round3.toStringAsFixed(0), theme),
+            ],
+          ),
+          const SizedBox(height: 24),
+
+          // Chart Section
+          Container(
+            height: 200,
+            padding: const EdgeInsets.all(16),
+            decoration: BoxDecoration(
+              color: theme.brightness == Brightness.dark ? Colors.white.withOpacity(0.05) : Colors.grey.shade50,
+              borderRadius: BorderRadius.circular(20),
+              border: Border.all(color: theme.dividerColor),
+            ),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  'Round-wise Cutoff Visualization',
+                  style: GoogleFonts.outfit(fontSize: 14, fontWeight: FontWeight.bold, color: Colors.grey),
+                ),
+                const SizedBox(height: 20),
+                Expanded(
+                  child: BarChart(
+                    BarChartData(
+                      alignment: BarChartAlignment.spaceAround,
+                      maxY: 800,
+                      barTouchData: BarTouchData(enabled: false),
+                      titlesData: FlTitlesData(
+                        show: true,
+                        bottomTitles: AxisTitles(
+                          sideTitles: SideTitles(
+                            showTitles: true,
+                            getTitlesWidget: (value, meta) {
+                              const style = TextStyle(fontSize: 10, fontWeight: FontWeight.bold);
+                              switch (value.toInt()) {
+                                case 0: return const Text('R1', style: style);
+                                case 1: return const Text('R2', style: style);
+                                case 2: return const Text('R3', style: style);
+                                default: return const Text('');
+                              }
+                            },
+                          ),
+                        ),
+                        leftTitles: const AxisTitles(sideTitles: SideTitles(showTitles: false)),
+                        topTitles: const AxisTitles(sideTitles: SideTitles(showTitles: false)),
+                        rightTitles: const AxisTitles(sideTitles: SideTitles(showTitles: false)),
+                      ),
+                      gridData: const FlGridData(show: false),
+                      borderData: FlBorderData(show: false),
+                      barGroups: [
+                        _makeBarGroup(0, cutoffData.round1, theme.colorScheme.primary),
+                        _makeBarGroup(1, cutoffData.round2, theme.colorScheme.secondary),
+                        _makeBarGroup(2, cutoffData.round3, Colors.orange),
+                      ],
+                    ),
+                  ),
+                ),
+              ],
+            ),
+          ),
+          const SizedBox(height: 24),
+          
+          // Phased Info / Expectations
+          _buildPhasedInfo(cutoffData, theme),
+        ],
+      ],
+    );
+  }
+
+  Widget _buildRoundCard(String label, String value, ThemeData theme) {
+    return Expanded(
+      child: Container(
+        padding: const EdgeInsets.all(12),
+        decoration: BoxDecoration(
+          color: theme.cardColor,
+          borderRadius: BorderRadius.circular(16),
+          border: Border.all(color: theme.dividerColor),
+        ),
+        child: Column(
+          children: [
+            Text(label, style: GoogleFonts.outfit(fontSize: 12, color: Colors.grey)),
+            const SizedBox(height: 4),
+            Text(value, style: GoogleFonts.outfit(fontSize: 18, fontWeight: FontWeight.bold)),
+          ],
+        ),
+      ),
+    );
+  }
+
+  BarChartGroupData _makeBarGroup(int x, double y, Color color) {
+    return BarChartGroupData(
+      x: x,
+      barRods: [
+        BarChartRodData(
+          toY: y,
+          color: color,
+          width: 22,
+          borderRadius: BorderRadius.circular(4),
+          backDrawRodData: BackgroundBarChartRodData(
+            show: true,
+            toY: 800,
+            color: color.withOpacity(0.1),
+          ),
+        ),
+      ],
+    );
+  }
+
+  Widget _buildPhasedInfo(CategoryCutoff cutoff, ThemeData theme) {
+    return Container(
+      padding: const EdgeInsets.all(16),
+      decoration: BoxDecoration(
+        color: theme.colorScheme.primary.withOpacity(0.05),
+        borderRadius: BorderRadius.circular(16),
+        border: Border.all(color: theme.colorScheme.primary.withOpacity(0.1)),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              Icon(LucideIcons.trendingUp, size: 18, color: theme.colorScheme.primary),
+              const SizedBox(width: 8),
+              Text(
+                'Admission Strategy',
+                style: GoogleFonts.outfit(fontWeight: FontWeight.bold, fontSize: 16),
+              ),
+            ],
+          ),
+          const SizedBox(height: 12),
+          _buildStrategyItem('Target Score', '${cutoff.expected2026.toStringAsFixed(0)}+', 'Highly Safe'),
+          const Divider(height: 24),
+          _buildStrategyItem('Waitlist Chance', 'Medium', 'Wait for Round 2/3 if score is >${cutoff.round2.toStringAsFixed(0)}'),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildStrategyItem(String label, String value, String sub) {
+    return Row(
+      mainAxisAlignment: MainAxisAlignment.spaceBetween,
+      children: [
+        Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text(label, style: GoogleFonts.outfit(fontSize: 13, color: Colors.grey)),
+            Text(sub, style: GoogleFonts.outfit(fontSize: 11, color: Colors.grey.shade500)),
+          ],
+        ),
+        Text(value, style: GoogleFonts.outfit(fontSize: 16, fontWeight: FontWeight.bold)),
+      ],
+    );
+  }
+
   Widget _buildLocation(ThemeData theme) {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
@@ -527,7 +783,10 @@ class CollegeDetailsScreen extends StatelessWidget {
     );
   }
 
-  Widget _buildBottomBar(BuildContext context, ThemeData theme, WishlistProvider wishlistProvider) {
+  Widget _buildBottomBar(BuildContext context, ThemeData theme, WishlistProvider wishlistProvider, CompareProvider compareProvider) {
+    final isInCompare = compareProvider.isInCompare(college.id);
+    final compareCount = compareProvider.count;
+
     return Container(
       padding: const EdgeInsets.fromLTRB(20, 16, 20, 32),
       decoration: BoxDecoration(
@@ -540,28 +799,97 @@ class CollegeDetailsScreen extends StatelessWidget {
         children: [
           Expanded(
             child: OutlinedButton(
-              onPressed: () {},
+              onPressed: () {
+                if (compareCount >= 2 && !isInCompare) {
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    const SnackBar(content: Text('You can only compare 2 colleges at a time.'))
+                  );
+                  return;
+                }
+                
+                compareProvider.toggleCompare(college);
+                
+                if (compareProvider.count == 2) {
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    SnackBar(
+                      content: const Text('2 colleges selected for comparison!'),
+                      action: SnackBarAction(
+                        label: 'COMPARE NOW',
+                        onPressed: () {
+                          Navigator.push(
+                            context,
+                            MaterialPageRoute(
+                              builder: (context) => CompareScreen(
+                                college1: compareProvider.compareList[0],
+                                college2: compareProvider.compareList[1],
+                              ),
+                            ),
+                          );
+                        },
+                      ),
+                    ),
+                  );
+                } else if (compareProvider.count == 1) {
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    const SnackBar(content: Text('Select one more college to compare.'))
+                  );
+                }
+              },
               style: OutlinedButton.styleFrom(
                 padding: const EdgeInsets.symmetric(vertical: 14),
-                side: BorderSide(color: theme.colorScheme.primary),
+                side: BorderSide(color: isInCompare ? Colors.orange : theme.colorScheme.primary),
                 shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                backgroundColor: isInCompare ? Colors.orange.withOpacity(0.1) : null,
               ),
-              child: Text('Compare', style: GoogleFonts.outfit(fontSize: 15, fontWeight: FontWeight.bold, color: theme.colorScheme.primary)),
+              child: Text(
+                isInCompare ? 'Selected (${compareCount}/2)' : 'Compare', 
+                style: GoogleFonts.outfit(
+                  fontSize: 15, 
+                  fontWeight: FontWeight.bold, 
+                  color: isInCompare ? Colors.orange : theme.colorScheme.primary
+                )
+              ),
             ),
           ),
           const SizedBox(width: 12),
           Expanded(
-            child: ElevatedButton(
-              onPressed: () => wishlistProvider.toggleWishlist(college),
+            child: ElevatedButton.icon(
+              onPressed: () {
+                final wasInWishlist = wishlistProvider.isInWishlist(college.id);
+                wishlistProvider.toggleWishlist(college);
+                
+                ScaffoldMessenger.of(context).showSnackBar(
+                  SnackBar(
+                    content: Text(
+                      wasInWishlist 
+                          ? '${college.name} removed from list' 
+                          : '${college.name} added to list'
+                    ),
+                    duration: const Duration(seconds: 2),
+                    behavior: SnackBarBehavior.floating,
+                  ),
+                );
+              },
+              icon: Icon(
+                wishlistProvider.isInWishlist(college.id) ? LucideIcons.check : LucideIcons.plus,
+                size: 18,
+              ),
               style: ElevatedButton.styleFrom(
                 padding: const EdgeInsets.symmetric(vertical: 14),
                 shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-                backgroundColor: wishlistProvider.isInWishlist(college.id) ? Colors.red.shade100 : theme.colorScheme.primary,
-                foregroundColor: wishlistProvider.isInWishlist(college.id) ? Colors.red : Colors.white,
+                backgroundColor: wishlistProvider.isInWishlist(college.id) 
+                    ? Colors.green.shade50 
+                    : theme.colorScheme.primary,
+                foregroundColor: wishlistProvider.isInWishlist(college.id) 
+                    ? Colors.green.shade700 
+                    : Colors.white,
                 elevation: 0,
+                side: wishlistProvider.isInWishlist(college.id) 
+                    ? BorderSide(color: Colors.green.shade200) 
+                    : null,
               ),
-              child: Text(
-                wishlistProvider.isInWishlist(college.id) ? 'Remove' : 'Wishlist',
+              label: Text(
+                wishlistProvider.isInWishlist(college.id) ? 'Added to List' : 'Add to List',
                 style: GoogleFonts.outfit(fontSize: 15, fontWeight: FontWeight.bold),
               ),
             ),
