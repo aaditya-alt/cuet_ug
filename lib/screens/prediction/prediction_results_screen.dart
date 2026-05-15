@@ -19,26 +19,15 @@ class PredictionResultsScreen extends StatefulWidget {
       _PredictionResultsScreenState();
 }
 
-class _PredictionResultsScreenState
-    extends State<PredictionResultsScreen> with SingleTickerProviderStateMixin {
+class _PredictionResultsScreenState extends State<PredictionResultsScreen>
+    with SingleTickerProviderStateMixin {
   String _searchQuery = '';
-  String _chanceFilter = 'All'; // All | High | Medium | Low
   late TabController _tabController;
 
   @override
   void initState() {
     super.initState();
     _tabController = TabController(length: 4, vsync: this);
-    _tabController.addListener(() {
-      setState(() {
-        switch (_tabController.index) {
-          case 0: _chanceFilter = 'All'; break;
-          case 1: _chanceFilter = 'High'; break;
-          case 2: _chanceFilter = 'Medium'; break;
-          case 3: _chanceFilter = 'Low'; break;
-        }
-      });
-    });
   }
 
   @override
@@ -47,10 +36,118 @@ class _PredictionResultsScreenState
     super.dispose();
   }
 
+  String get _chanceFilter {
+    switch (_tabController.index) {
+      case 1: return 'High';
+      case 2: return 'Medium';
+      case 3: return 'Low';
+      default: return 'All';
+    }
+  }
+
+  // ── Build a CollegeModel from real JSON data (fallback when not in MockData) ──
+  CollegeModel _resolveCollege(
+      String collegeName, CutoffProvider cutoffProvider) {
+    // 1) Try exact match in MockData
+    try {
+      return MockData.colleges
+          .firstWhere((c) => c.name.toLowerCase() == collegeName.toLowerCase());
+    } catch (_) {}
+
+    // 2) Try contains match
+    try {
+      return MockData.colleges.firstWhere((c) =>
+          c.name.toLowerCase().contains(collegeName.toLowerCase()) ||
+          collegeName.toLowerCase().contains(c.name.toLowerCase()));
+    } catch (_) {}
+
+    // 3) Build a minimal CollegeModel from real cutoff data
+    final programs = cutoffProvider.getProgramsForCollege(collegeName);
+    final courses = programs.map((p) {
+      return CourseCutoff(
+        courseName: p,
+        cutoffs: {
+          'General': CategoryCutoff(round1: 0, round2: 0, round3: 0, expected2026: 0),
+          'OBC':     CategoryCutoff(round1: 0, round2: 0, round3: 0, expected2026: 0),
+          'SC':      CategoryCutoff(round1: 0, round2: 0, round3: 0, expected2026: 0),
+          'ST':      CategoryCutoff(round1: 0, round2: 0, round3: 0, expected2026: 0),
+          'EWS':     CategoryCutoff(round1: 0, round2: 0, round3: 0, expected2026: 0),
+        },
+        fee: 'As per DU norms',
+        duration: '3 Years',
+      );
+    }).toList();
+
+    return CollegeModel(
+      id: collegeName.toLowerCase().replaceAll(RegExp(r'[^a-z0-9]'), '_'),
+      name: collegeName,
+      campus: _inferCampus(collegeName),
+      type: 'Government',
+      gender: _inferGender(collegeName),
+      logoUrl:
+          'https://upload.wikimedia.org/wikipedia/en/4/41/DU_logo.png',
+      photos: const [],
+      nirfRanking: 999,
+      courses: courses.isNotEmpty
+          ? courses
+          : [
+              CourseCutoff(
+                courseName: 'Various Programs',
+                cutoffs: {},
+                fee: 'As per DU norms',
+                duration: '3 Years',
+              )
+            ],
+      description:
+          'A constituent college of the University of Delhi offering quality education.',
+      address: 'University of Delhi, Delhi',
+      nearbyMetro: 'Contact college for directions',
+      rankings: const [],
+      facilities: const [],
+    );
+  }
+
+  String _inferCampus(String name) {
+    final n = name.toLowerCase();
+    if (n.contains('north') ||
+        n.contains('miranda') ||
+        n.contains('hindu') ||
+        n.contains('ramjas') ||
+        n.contains('stephen') ||
+        n.contains('srcc') ||
+        n.contains('hansraj') ||
+        n.contains('kirori') ||
+        n.contains('daulat') ||
+        n.contains('indraprastha') ||
+        n.contains('khalsa')) return 'North Campus';
+    if (n.contains('south') ||
+        n.contains('lady shri ram') ||
+        n.contains('lsr') ||
+        n.contains('venkat') ||
+        n.contains('gargi') ||
+        n.contains('kamla') ||
+        n.contains('maitreyi') ||
+        n.contains('motilal') ||
+        n.contains('shaheed bhagat') ||
+        n.contains('arsd') ||
+        n.contains('jesus') ||
+        n.contains('pgdav')) return 'South Campus';
+    return 'Off Campus';
+  }
+
+  String _inferGender(String name) {
+    final n = name.toLowerCase();
+    if (n.contains('(w)') ||
+        n.contains('women') ||
+        n.contains('girls') ||
+        n.contains('mahavidyalaya')) return 'Women';
+    return 'Co-ed';
+  }
+
   @override
   Widget build(BuildContext context) {
-    final scoreProvider   = Provider.of<UserScoreProvider>(context);
-    final cutoffProvider  = Provider.of<CutoffProvider>(context);
+    final scoreProvider    = Provider.of<UserScoreProvider>(context);
+    final cutoffProvider   = Provider.of<CutoffProvider>(context);
     final wishlistProvider = Provider.of<WishlistProvider>(context);
     final compareProvider  = Provider.of<CompareProvider>(context);
     final theme = Theme.of(context);
@@ -79,33 +176,21 @@ class _PredictionResultsScreenState
           .toList();
     }
 
-    // Apply chance filter
+    // Apply chance tab filter
     if (_chanceFilter != 'All') {
       predictions =
           predictions.where((p) => p.chance == _chanceFilter).toList();
     }
 
-    // Helper: find CollegeModel for a college name (for logo/details nav)
-    CollegeModel? findCollegeModel(String name) {
-      try {
-        return MockData.colleges
-            .firstWhere((c) => c.name.toLowerCase() == name.toLowerCase());
-      } catch (_) {
-        return null;
-      }
-    }
-
     return Scaffold(
       appBar: AppBar(
-        title: Text(
-          'College Predictions',
-          style: GoogleFonts.outfit(fontWeight: FontWeight.bold),
-        ),
+        title: Text('College Predictions',
+            style: GoogleFonts.outfit(fontWeight: FontWeight.bold)),
         bottom: TabBar(
           controller: _tabController,
-          isScrollable: false,
+          onTap: (_) => setState(() {}),
           labelStyle:
-              GoogleFonts.outfit(fontSize: 13, fontWeight: FontWeight.bold),
+              GoogleFonts.outfit(fontSize: 12, fontWeight: FontWeight.bold),
           tabs: const [
             Tab(text: 'All'),
             Tab(text: '✅ High'),
@@ -120,17 +205,17 @@ class _PredictionResultsScreenState
           Container(
             color: theme.colorScheme.primary.withOpacity(0.06),
             padding:
-                const EdgeInsets.symmetric(horizontal: 20, vertical: 10),
+                const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
             child: Row(
               children: [
                 Icon(LucideIcons.info,
-                    size: 14, color: theme.colorScheme.primary),
+                    size: 13, color: theme.colorScheme.primary),
                 const SizedBox(width: 8),
                 Expanded(
                   child: Text(
-                    'Score: ${userScore.toStringAsFixed(0)} • Subject: $domainSubject • Category: $category',
+                    'Score: ${userScore.toStringAsFixed(0)} / 800  •  $domainSubject  •  $category',
                     style: GoogleFonts.outfit(
-                        fontSize: 12, color: Colors.grey.shade600),
+                        fontSize: 11, color: Colors.grey.shade600),
                     overflow: TextOverflow.ellipsis,
                   ),
                 ),
@@ -154,6 +239,20 @@ class _PredictionResultsScreenState
             ),
           ),
 
+          // ── Result count ──────────────────────────────────────────────
+          if (!cutoffProvider.isLoading)
+            Padding(
+              padding: const EdgeInsets.only(left: 20, bottom: 4),
+              child: Align(
+                alignment: Alignment.centerLeft,
+                child: Text(
+                  '${predictions.length} result${predictions.length == 1 ? '' : 's'}',
+                  style: GoogleFonts.outfit(
+                      fontSize: 12, color: Colors.grey.shade500),
+                ),
+              ),
+            ),
+
           // ── Results list ──────────────────────────────────────────────
           Expanded(
             child: cutoffProvider.isLoading
@@ -164,22 +263,24 @@ class _PredictionResultsScreenState
                         CircularProgressIndicator(
                             color: theme.colorScheme.primary),
                         const SizedBox(height: 16),
-                        Text('Loading cutoff data…',
-                            style: GoogleFonts.outfit(color: Colors.grey)),
+                        Text('Loading 2025 cutoff data…',
+                            style:
+                                GoogleFonts.outfit(color: Colors.grey)),
                       ],
                     ),
                   )
                 : predictions.isEmpty
                     ? _buildEmpty(context)
                     : ListView.builder(
-                        padding: const EdgeInsets.fromLTRB(16, 0, 16, 100),
+                        padding:
+                            const EdgeInsets.fromLTRB(16, 0, 16, 100),
                         itemCount: predictions.length,
                         itemBuilder: (context, index) {
                           final p = predictions[index];
-                          final college = findCollegeModel(p.collegeName);
-                          final isInCompare = college != null
-                              ? compareProvider.isInCompare(college.id)
-                              : false;
+                          final college =
+                              _resolveCollege(p.collegeName, cutoffProvider);
+                          final isInCompare =
+                              compareProvider.isInCompare(college.id);
                           return _buildCard(
                             context,
                             p,
@@ -216,11 +317,11 @@ class _PredictionResultsScreenState
     );
   }
 
-  // ── Card ────────────────────────────────────────────────────────────────
+  // ── Card ──────────────────────────────────────────────────────────────────
   Widget _buildCard(
     BuildContext context,
     PredictionResult p,
-    CollegeModel? college,
+    CollegeModel college,
     bool isInCompare,
     WishlistProvider wishlistProvider,
     CompareProvider compareProvider,
@@ -242,14 +343,11 @@ class _PredictionResultsScreenState
       margin: const EdgeInsets.only(bottom: 14),
       child: InkWell(
         borderRadius: BorderRadius.circular(20),
-        onTap: college != null
-            ? () => Navigator.push(
-                  context,
-                  MaterialPageRoute(
-                      builder: (_) =>
-                          CollegeDetailsScreen(college: college)),
-                )
-            : null,
+        onTap: () => Navigator.push(
+          context,
+          MaterialPageRoute(
+              builder: (_) => CollegeDetailsScreen(college: college)),
+        ),
         child: Padding(
           padding: const EdgeInsets.all(16),
           child: Column(
@@ -261,8 +359,8 @@ class _PredictionResultsScreenState
                 children: [
                   // Logo
                   Container(
-                    width: 48,
-                    height: 48,
+                    width: 46,
+                    height: 46,
                     decoration: BoxDecoration(
                       color: Colors.white,
                       borderRadius: BorderRadius.circular(10),
@@ -274,22 +372,20 @@ class _PredictionResultsScreenState
                             offset: const Offset(0, 2)),
                       ],
                     ),
-                    child: college != null
-                        ? ClipRRect(
-                            borderRadius: BorderRadius.circular(10),
-                            child: Image.network(
-                              college.logoUrl,
-                              fit: BoxFit.contain,
-                              errorBuilder: (_, __, ___) => const Icon(
-                                  LucideIcons.building2,
-                                  color: Colors.grey,
-                                  size: 22),
-                            ),
-                          )
-                        : const Icon(LucideIcons.building2,
-                            color: Colors.grey, size: 22),
+                    child: ClipRRect(
+                      borderRadius: BorderRadius.circular(10),
+                      child: Image.network(
+                        college.logoUrl,
+                        fit: BoxFit.contain,
+                        errorBuilder: (_, __, ___) => const Icon(
+                            LucideIcons.building2,
+                            color: Colors.grey,
+                            size: 20),
+                      ),
+                    ),
                   ),
                   const SizedBox(width: 12),
+                  // College + program name
                   Expanded(
                     child: Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
@@ -297,87 +393,89 @@ class _PredictionResultsScreenState
                         Text(
                           p.collegeName,
                           style: GoogleFonts.outfit(
-                            fontSize: 16,
+                            fontSize: 15,
                             fontWeight: FontWeight.bold,
                             height: 1.2,
                           ),
+                          maxLines: 2,
+                          overflow: TextOverflow.ellipsis,
                         ),
                         const SizedBox(height: 3),
                         Text(
                           p.programName,
                           style: GoogleFonts.outfit(
-                              fontSize: 12, color: Colors.grey.shade600),
+                              fontSize: 11, color: Colors.grey.shade600),
                           maxLines: 2,
                           overflow: TextOverflow.ellipsis,
                         ),
                       ],
                     ),
                   ),
-                  // Wishlist + compare icons
-                  if (college != null)
-                    Column(
-                      children: [
-                        IconButton(
-                          icon: Icon(
+                  // Wishlist + compare
+                  Column(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      GestureDetector(
+                        onTap: () {
+                          final was = wishlistProvider
+                              .isInWishlist(college.id);
+                          wishlistProvider.toggleWishlist(college);
+                          ScaffoldMessenger.of(context).showSnackBar(
+                            SnackBar(
+                              content: Text(was
+                                  ? '${college.name} removed'
+                                  : '${college.name} added to wishlist'),
+                              duration: const Duration(seconds: 1),
+                              behavior: SnackBarBehavior.floating,
+                            ),
+                          );
+                        },
+                        child: Padding(
+                          padding: const EdgeInsets.all(6),
+                          child: Icon(
                             LucideIcons.heart,
-                            size: 20,
+                            size: 18,
                             color: wishlistProvider.isInWishlist(college.id)
                                 ? Colors.red
                                 : Colors.grey.shade400,
                           ),
-                          onPressed: () {
-                            final was = wishlistProvider
-                                .isInWishlist(college.id);
-                            wishlistProvider.toggleWishlist(college);
-                            ScaffoldMessenger.of(context).showSnackBar(
-                              SnackBar(
-                                content: Text(was
-                                    ? '${college.name} removed'
-                                    : '${college.name} added to wishlist'),
-                                duration: const Duration(seconds: 1),
-                                behavior: SnackBarBehavior.floating,
-                              ),
-                            );
-                          },
-                          padding: EdgeInsets.zero,
-                          constraints: const BoxConstraints(),
                         ),
-                        const SizedBox(height: 4),
-                        IconButton(
-                          icon: Icon(
+                      ),
+                      GestureDetector(
+                        onTap: () {
+                          if (!isInCompare && compareProvider.count >= 2) {
+                            ScaffoldMessenger.of(context).showSnackBar(
+                              const SnackBar(
+                                  content: Text(
+                                      'You can only compare 2 colleges at a time.')),
+                            );
+                            return;
+                          }
+                          compareProvider.toggleCompare(college);
+                        },
+                        child: Padding(
+                          padding: const EdgeInsets.all(6),
+                          child: Icon(
                             isInCompare
                                 ? LucideIcons.checkCircle2
                                 : LucideIcons.plusCircle,
-                            size: 18,
+                            size: 17,
                             color: isInCompare
                                 ? Colors.orange
                                 : Colors.grey.shade400,
                           ),
-                          onPressed: () {
-                            if (!isInCompare &&
-                                compareProvider.count >= 2) {
-                              ScaffoldMessenger.of(context).showSnackBar(
-                                const SnackBar(
-                                    content: Text(
-                                        'You can only compare 2 colleges at a time.')),
-                              );
-                              return;
-                            }
-                            compareProvider.toggleCompare(college);
-                          },
-                          padding: EdgeInsets.zero,
-                          constraints: const BoxConstraints(),
                         ),
-                      ],
-                    ),
+                      ),
+                    ],
+                  ),
                 ],
               ),
 
               const SizedBox(height: 14),
               const Divider(height: 1),
-              const SizedBox(height: 14),
+              const SizedBox(height: 12),
 
-              // Row 2: Cutoff vs your score + chance badge
+              // Row 2: Cutoff | Your Score | Chance badge
               Row(
                 children: [
                   // Round 1 cutoff
@@ -386,43 +484,45 @@ class _PredictionResultsScreenState
                     p.cutoffScore.toStringAsFixed(0),
                     LucideIcons.shieldCheck,
                     Colors.green,
-                    theme,
                   ),
-                  const SizedBox(width: 12),
+                  const SizedBox(width: 16),
                   // Your score
                   _buildMetric(
                     'Your Score',
                     p.userScore.toStringAsFixed(0),
                     LucideIcons.user,
-                    theme.colorScheme.primary,
-                    theme,
+                    Theme.of(context).colorScheme.primary,
                   ),
                   const Spacer(),
                   // Chance badge
-                  Container(
-                    padding: const EdgeInsets.symmetric(
-                        horizontal: 12, vertical: 8),
-                    decoration: BoxDecoration(
-                      color: chanceColor.withOpacity(0.1),
-                      borderRadius: BorderRadius.circular(10),
-                      border: Border.all(
-                          color: chanceColor.withOpacity(0.25)),
-                    ),
-                    child: Row(
-                      mainAxisSize: MainAxisSize.min,
-                      children: [
-                        Icon(chanceIcon,
-                            size: 14, color: chanceColor),
-                        const SizedBox(width: 4),
-                        Text(
-                          '${p.chance} Chance',
-                          style: GoogleFonts.outfit(
-                            color: chanceColor,
-                            fontWeight: FontWeight.bold,
-                            fontSize: 12,
+                  Flexible(
+                    child: Container(
+                      padding: const EdgeInsets.symmetric(
+                          horizontal: 10, vertical: 7),
+                      decoration: BoxDecoration(
+                        color: chanceColor.withOpacity(0.1),
+                        borderRadius: BorderRadius.circular(10),
+                        border: Border.all(
+                            color: chanceColor.withOpacity(0.25)),
+                      ),
+                      child: Row(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          Icon(chanceIcon, size: 13, color: chanceColor),
+                          const SizedBox(width: 4),
+                          Flexible(
+                            child: Text(
+                              '${p.chance} Chance',
+                              style: GoogleFonts.outfit(
+                                color: chanceColor,
+                                fontWeight: FontWeight.bold,
+                                fontSize: 11,
+                              ),
+                              overflow: TextOverflow.ellipsis,
+                            ),
                           ),
-                        ),
-                      ],
+                        ],
+                      ),
                     ),
                   ),
                 ],
@@ -434,25 +534,25 @@ class _PredictionResultsScreenState
     );
   }
 
-  Widget _buildMetric(String label, String value, IconData icon, Color color,
-      ThemeData theme) {
+  Widget _buildMetric(
+      String label, String value, IconData icon, Color color) {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         Row(
           children: [
-            Icon(icon, size: 11, color: color),
-            const SizedBox(width: 4),
+            Icon(icon, size: 10, color: color),
+            const SizedBox(width: 3),
             Text(label,
                 style: GoogleFonts.outfit(
-                    fontSize: 10, color: Colors.grey.shade500)),
+                    fontSize: 9, color: Colors.grey.shade500)),
           ],
         ),
         const SizedBox(height: 2),
         Text(
           value,
           style: GoogleFonts.outfit(
-            fontSize: 18,
+            fontSize: 17,
             fontWeight: FontWeight.bold,
             color: color,
           ),
@@ -463,27 +563,32 @@ class _PredictionResultsScreenState
 
   Widget _buildEmpty(BuildContext context) {
     return Center(
-      child: Column(
-        mainAxisAlignment: MainAxisAlignment.center,
-        children: [
-          Icon(LucideIcons.searchX, size: 64, color: Colors.grey.shade300),
-          const SizedBox(height: 16),
-          Text('No matching colleges found',
-              style: GoogleFonts.outfit(
-                  fontSize: 18, fontWeight: FontWeight.bold)),
-          const SizedBox(height: 8),
-          Text(
-            'Try changing your domain subject\nor adjusting your score',
-            style: GoogleFonts.outfit(color: Colors.grey, fontSize: 14),
-            textAlign: TextAlign.center,
-          ),
-          const SizedBox(height: 20),
-          TextButton.icon(
-            onPressed: () => Navigator.pop(context),
-            icon: const Icon(LucideIcons.arrowLeft),
-            label: const Text('Go Back & Adjust'),
-          ),
-        ],
+      child: Padding(
+        padding: const EdgeInsets.all(32),
+        child: Column(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            Icon(LucideIcons.searchX,
+                size: 64, color: Colors.grey.shade300),
+            const SizedBox(height: 16),
+            Text('No matching colleges found',
+                style: GoogleFonts.outfit(
+                    fontSize: 18, fontWeight: FontWeight.bold),
+                textAlign: TextAlign.center),
+            const SizedBox(height: 8),
+            Text(
+              'Try selecting a different domain subject\nor adjusting your score on the home screen.',
+              style: GoogleFonts.outfit(color: Colors.grey, fontSize: 14),
+              textAlign: TextAlign.center,
+            ),
+            const SizedBox(height: 20),
+            TextButton.icon(
+              onPressed: () => Navigator.pop(context),
+              icon: const Icon(LucideIcons.arrowLeft),
+              label: const Text('Go Back & Adjust'),
+            ),
+          ],
+        ),
       ),
     );
   }
