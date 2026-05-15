@@ -52,30 +52,34 @@ class _HomeTabState extends State<HomeTab> {
             children: [
               // ── Header ──────────────────────────────────────────────────
               Row(
-                mainAxisAlignment: MainAxisAlignment.spaceBetween,
                 children: [
-                  Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Text(
-                        'Hi, Student 👋',
-                        style: GoogleFonts.outfit(
-                          fontSize: 28,
-                          fontWeight: FontWeight.bold,
-                          color: theme.textTheme.displayLarge?.color,
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          'Hi, Student 👋',
+                          style: GoogleFonts.outfit(
+                            fontSize: 26,
+                            fontWeight: FontWeight.bold,
+                            color: theme.textTheme.displayLarge?.color,
+                          ),
+                          overflow: TextOverflow.ellipsis,
                         ),
-                      ),
-                      const SizedBox(height: 4),
-                      Text(
-                        'Find your dream DU college',
-                        style: GoogleFonts.outfit(
-                          fontSize: 16,
-                          color: theme.textTheme.bodyLarge?.color
-                              ?.withOpacity(0.7),
+                        const SizedBox(height: 4),
+                        Text(
+                          'Find your dream DU college',
+                          style: GoogleFonts.outfit(
+                            fontSize: 14,
+                            color: theme.textTheme.bodyLarge?.color
+                                ?.withOpacity(0.7),
+                          ),
+                          overflow: TextOverflow.ellipsis,
                         ),
-                      ),
-                    ],
+                      ],
+                    ),
                   ),
+                  const SizedBox(width: 8),
                   Container(
                     decoration: BoxDecoration(
                       color: theme.colorScheme.surface,
@@ -130,11 +134,14 @@ class _HomeTabState extends State<HomeTab> {
                               color: theme.colorScheme.primary, size: 20),
                         ),
                         const SizedBox(width: 12),
-                        Text(
-                          'Enter Your CUET Scores',
-                          style: GoogleFonts.outfit(
-                            fontSize: 20,
-                            fontWeight: FontWeight.bold,
+                        Expanded(
+                          child: Text(
+                            'Enter Your CUET Scores',
+                            style: GoogleFonts.outfit(
+                              fontSize: 18,
+                              fontWeight: FontWeight.bold,
+                            ),
+                            overflow: TextOverflow.ellipsis,
                           ),
                         ),
                       ],
@@ -386,7 +393,6 @@ class _HomeTabState extends State<HomeTab> {
                       fontSize: 20, fontWeight: FontWeight.bold)),
               const SizedBox(height: 16),
               Row(
-                mainAxisAlignment: MainAxisAlignment.spaceBetween,
                 children: [
                   _buildQuickAction(context, LucideIcons.building, 'Colleges',
                       Colors.blue, onTap: () {
@@ -395,6 +401,7 @@ class _HomeTabState extends State<HomeTab> {
                         MaterialPageRoute(
                             builder: (_) => const PredictionResultsScreen()));
                   }),
+                  const SizedBox(width: 8),
                   _buildQuickAction(context, LucideIcons.bookOpen, 'Cutoffs',
                       Colors.green, onTap: () {
                     Navigator.push(
@@ -402,6 +409,7 @@ class _HomeTabState extends State<HomeTab> {
                         MaterialPageRoute(
                             builder: (_) => const AnalyticsTab()));
                   }),
+                  const SizedBox(width: 8),
                   _buildQuickAction(context, LucideIcons.calendar, 'Timeline',
                       Colors.orange, onTap: () {
                     Navigator.push(
@@ -409,6 +417,7 @@ class _HomeTabState extends State<HomeTab> {
                         MaterialPageRoute(
                             builder: (_) => const CsasTimelineScreen()));
                   }),
+                  const SizedBox(width: 8),
                   _buildQuickAction(context, LucideIcons.heart, 'Wishlist',
                       Colors.red, onTap: () {
                     Navigator.push(
@@ -433,12 +442,15 @@ class _HomeTabState extends State<HomeTab> {
       children: [
         Icon(icon, size: 16, color: theme.colorScheme.primary),
         const SizedBox(width: 8),
-        Text(
-          label,
-          style: GoogleFonts.outfit(
-            fontSize: 14,
-            fontWeight: FontWeight.w600,
-            color: theme.textTheme.bodyLarge?.color,
+        Flexible(
+          child: Text(
+            label,
+            style: GoogleFonts.outfit(
+              fontSize: 13,
+              fontWeight: FontWeight.w600,
+              color: theme.textTheme.bodyLarge?.color,
+            ),
+            overflow: TextOverflow.ellipsis,
           ),
         ),
       ],
@@ -557,18 +569,20 @@ class _HomeTabState extends State<HomeTab> {
           Icon(LucideIcons.zap, size: 18, color: theme.colorScheme.primary),
           const SizedBox(width: 10),
           Expanded(
+            flex: 2,
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 Text(
                   'Your Composite Score',
                   style: GoogleFonts.outfit(
-                      fontSize: 12, color: Colors.grey.shade500),
+                      fontSize: 11, color: Colors.grey.shade500),
+                  overflow: TextOverflow.ellipsis,
                 ),
                 Text(
                   '${total.toStringAsFixed(0)} / 800',
                   style: GoogleFonts.outfit(
-                    fontSize: 20,
+                    fontSize: 19,
                     fontWeight: FontWeight.bold,
                     color: theme.colorScheme.primary,
                   ),
@@ -576,14 +590,19 @@ class _HomeTabState extends State<HomeTab> {
               ],
             ),
           ),
-          Text(
-            sp.score.domainSubject,
-            style: GoogleFonts.outfit(
-                fontSize: 11,
-                color: Colors.grey.shade500,
-                fontWeight: FontWeight.w500),
-            textAlign: TextAlign.right,
-            overflow: TextOverflow.ellipsis,
+          const SizedBox(width: 8),
+          Flexible(
+            flex: 3,
+            child: Text(
+              sp.score.domainSubject,
+              style: GoogleFonts.outfit(
+                  fontSize: 10,
+                  color: Colors.grey.shade500,
+                  fontWeight: FontWeight.w500),
+              textAlign: TextAlign.right,
+              overflow: TextOverflow.ellipsis,
+              maxLines: 2,
+            ),
           ),
         ],
       ),
@@ -593,26 +612,31 @@ class _HomeTabState extends State<HomeTab> {
   Widget _buildQuickAction(
       BuildContext context, IconData icon, String label, Color color,
       {VoidCallback? onTap}) {
-    return InkWell(
-      onTap: onTap,
-      borderRadius: BorderRadius.circular(16),
-      child: Column(
-        children: [
-          Container(
-            padding: const EdgeInsets.all(16),
-            decoration: BoxDecoration(
-              color: color.withOpacity(0.1),
-              borderRadius: BorderRadius.circular(16),
+    return Expanded(
+      child: InkWell(
+        onTap: onTap,
+        borderRadius: BorderRadius.circular(16),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Container(
+              padding: const EdgeInsets.all(14),
+              decoration: BoxDecoration(
+                color: color.withOpacity(0.1),
+                borderRadius: BorderRadius.circular(14),
+              ),
+              child: Icon(icon, color: color, size: 24),
             ),
-            child: Icon(icon, color: color, size: 26),
-          ),
-          const SizedBox(height: 8),
-          Text(
-            label,
-            style:
-                GoogleFonts.outfit(fontSize: 12, fontWeight: FontWeight.w500),
-          ),
-        ],
+            const SizedBox(height: 6),
+            Text(
+              label,
+              style: GoogleFonts.outfit(
+                  fontSize: 11, fontWeight: FontWeight.w500),
+              overflow: TextOverflow.ellipsis,
+              textAlign: TextAlign.center,
+            ),
+          ],
+        ),
       ),
     );
   }

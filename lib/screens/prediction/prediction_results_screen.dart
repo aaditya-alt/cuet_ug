@@ -183,6 +183,7 @@ class _PredictionResultsScreenState extends State<PredictionResultsScreen>
     }
 
     return Scaffold(
+      resizeToAvoidBottomInset: false,
       appBar: AppBar(
         title: Text('College Predictions',
             style: GoogleFonts.outfit(fontWeight: FontWeight.bold)),
@@ -272,8 +273,12 @@ class _PredictionResultsScreenState extends State<PredictionResultsScreen>
                 : predictions.isEmpty
                     ? _buildEmpty(context)
                     : ListView.builder(
-                        padding:
-                            const EdgeInsets.fromLTRB(16, 0, 16, 100),
+                        padding: EdgeInsets.fromLTRB(
+                          16,
+                          0,
+                          16,
+                          MediaQuery.of(context).viewInsets.bottom + 100,
+                        ),
                         itemCount: predictions.length,
                         itemBuilder: (context, index) {
                           final p = predictions[index];
