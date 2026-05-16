@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'package:supabase_flutter/supabase_flutter.dart';
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import 'package:shared_preferences/shared_preferences.dart';
@@ -7,6 +8,7 @@ import 'theme/app_theme.dart';
 import 'screens/splash_screen.dart';
 import 'screens/onboarding_screen.dart';
 import 'screens/main_screen.dart';
+import 'screens/auth/reset_password_screen.dart';
 import 'screens/college/college_details_screen.dart';
 import 'data/mock_data.dart';
 
@@ -15,9 +17,17 @@ import 'providers/wishlist_provider.dart';
 import 'providers/filter_provider.dart';
 import 'providers/compare_provider.dart';
 import 'providers/cutoff_provider.dart';
+import 'providers/navigation_provider.dart';
+import 'providers/auth_service.dart';
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
+  
+  await Supabase.initialize(
+    url: 'https://fvrmbifeikpleuwblgqw.supabase.co',
+    anonKey: 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImZ2cm1iaWZlaWtwbGV1d2JsZ3F3Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3Nzg5MDE3NTAsImV4cCI6MjA5NDQ3Nzc1MH0.uJ0jRqD0Kb1tXrMqX8OlvgQpOfvow5lCMBwZFu7reHY',
+  );
+
   final prefs = await SharedPreferences.getInstance();
   
   runApp(
@@ -29,6 +39,8 @@ void main() async {
         ChangeNotifierProvider(create: (_) => FilterProvider()),
         ChangeNotifierProvider(create: (_) => CompareProvider()),
         ChangeNotifierProvider(create: (_) => CutoffProvider()),
+        ChangeNotifierProvider(create: (_) => NavigationProvider()),
+        ChangeNotifierProvider(create: (_) => AuthService()),
       ],
       child: const MyApp(),
     ),
@@ -126,6 +138,19 @@ class _MyAppState extends State<MyApp> {
     // Handle cuet://college?id=...
     else if (uri.scheme == 'cuet' && uri.queryParameters.containsKey('id')) {
       collegeId = uri.queryParameters['id'];
+    }
+
+    // Handle password reset: cuet://reset-password#access_token=...
+    if (uri.host == 'reset-password') {
+      debugPrint('Detected password reset link');
+      // Supabase handles the session automatically if using supabase_flutter
+      // but we should navigate the user to a screen where they can set a new password
+      navigatorKey.currentState?.push(
+        MaterialPageRoute(
+          builder: (context) => const ResetPasswordScreen(),
+        ),
+      );
+      return;
     }
 
     if (collegeId != null) {

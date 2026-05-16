@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:lucide_icons/lucide_icons.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 import 'auth/login_screen.dart';
 import 'auth/signup_screen.dart';
 import 'main_screen.dart';
@@ -8,10 +9,14 @@ import 'main_screen.dart';
 class AuthScreen extends StatelessWidget {
   const AuthScreen({super.key});
 
-  void _navigateToHome(BuildContext context) {
-    Navigator.of(context).pushReplacement(
-      MaterialPageRoute(builder: (context) => const MainScreen()),
-    );
+  Future<void> _navigateToHome(BuildContext context) async {
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setBool('guest_mode', true);
+    if (context.mounted) {
+      Navigator.of(context).pushReplacement(
+        MaterialPageRoute(builder: (context) => const MainScreen()),
+      );
+    }
   }
 
   void _navigateToLogin(BuildContext context) {

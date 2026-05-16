@@ -1,6 +1,10 @@
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
+import 'package:supabase_flutter/supabase_flutter.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 import 'onboarding_screen.dart';
+import 'main_screen.dart';
+import 'auth_screen.dart';
 
 class SplashScreen extends StatefulWidget {
   const SplashScreen({super.key});
@@ -32,19 +36,38 @@ class _SplashScreenState extends State<SplashScreen> with SingleTickerProviderSt
 
     _controller.forward();
 
-    Future.delayed(const Duration(seconds: 3), () {
-      if (mounted) {
-        Navigator.of(context).pushReplacement(
-          PageRouteBuilder(
-            pageBuilder: (context, animation, secondaryAnimation) => const OnboardingScreen(),
-            transitionsBuilder: (context, animation, secondaryAnimation, child) {
-              return FadeTransition(opacity: animation, child: child);
-            },
-            transitionDuration: const Duration(milliseconds: 800),
-          ),
-        );
-      }
-    });
+    _checkNavigation();
+  }
+
+  Future<void> _checkNavigation() async {
+    await Future.delayed(const Duration(seconds: 3));
+    if (!mounted) return;
+
+    final prefs = await SharedPreferences.getInstance();
+    final bool onboardingComplete = prefs.getBool('onboarding_complete') ?? false;
+    final bool guestMode = prefs.getBool('guest_mode') ?? false;
+    final session = Supabase.instance.client.auth.currentSession;
+
+    Widget nextScreen;
+    if (!onboardingComplete) {
+      nextScreen = const OnboardingScreen();
+    } else if (session != null || guestMode) {
+      nextScreen = const MainScreen();
+    } else {
+      nextScreen = const AuthScreen();
+    }
+
+    if (mounted) {
+      Navigator.of(context).pushReplacement(
+        PageRouteBuilder(
+          pageBuilder: (context, animation, secondaryAnimation) => nextScreen,
+          transitionsBuilder: (context, animation, secondaryAnimation, child) {
+            return FadeTransition(opacity: animation, child: child);
+          },
+          transitionDuration: const Duration(milliseconds: 800),
+        ),
+      );
+    }
   }
 
   @override

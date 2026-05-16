@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 import 'auth_screen.dart';
 
 class OnboardingScreen extends StatefulWidget {
@@ -44,16 +45,20 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
     }
   }
 
-  void _nextPage() {
+  Future<void> _nextPage() async {
     if (_currentPage < _onboardingData.length - 1) {
       _pageController.nextPage(
         duration: const Duration(milliseconds: 300),
         curve: Curves.easeInOut,
       );
     } else {
-      Navigator.of(context).pushReplacement(
-        MaterialPageRoute(builder: (context) => const AuthScreen()),
-      );
+      final prefs = await SharedPreferences.getInstance();
+      await prefs.setBool('onboarding_complete', true);
+      if (mounted) {
+        Navigator.of(context).pushReplacement(
+          MaterialPageRoute(builder: (context) => const AuthScreen()),
+        );
+      }
     }
   }
 

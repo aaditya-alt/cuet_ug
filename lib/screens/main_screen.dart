@@ -1,9 +1,13 @@
 import 'package:flutter/material.dart';
 import 'package:lucide_icons/lucide_icons.dart';
+import 'package:provider/provider.dart';
+import '../providers/navigation_provider.dart';
 
 // Placeholder imports for tabs
 import 'home/home_tab.dart';
-import 'prediction/prediction_results_screen.dart'; // or college tab
+import 'prediction/prediction_results_screen.dart'; 
+import 'prediction/du_input_screen.dart';
+import 'prediction/du_college_discovery_screen.dart';
 import 'wishlist/wishlist_tab.dart';
 import 'analytics/analytics_tab.dart';
 import 'profile/profile_tab.dart';
@@ -17,21 +21,20 @@ class MainScreen extends StatefulWidget {
 }
 
 class _MainScreenState extends State<MainScreen> {
-  int _currentIndex = 0;
-
   final List<Widget> _tabs = [
     const HomeTab(),
-    const PredictionResultsScreen(), // We'll use this as the Colleges tab for now
+    const DuCollegeDiscoveryScreen(), 
     const PremiumScreen(),
-    const AnalyticsTab(),
     const ProfileTab(),
   ];
 
   @override
   Widget build(BuildContext context) {
+    final navProvider = Provider.of<NavigationProvider>(context);
+
     return Scaffold(
       body: IndexedStack(
-        index: _currentIndex,
+        index: navProvider.currentIndex,
         children: _tabs,
       ),
       bottomNavigationBar: Container(
@@ -45,16 +48,13 @@ class _MainScreenState extends State<MainScreen> {
           ],
         ),
         child: BottomNavigationBar(
-          currentIndex: _currentIndex,
+          currentIndex: navProvider.currentIndex,
           onTap: (index) {
-            setState(() {
-              _currentIndex = index;
-            });
+            navProvider.setIndex(index);
           },
           items: const [
             BottomNavigationBarItem(
               icon: Icon(LucideIcons.home),
-              activeIcon: Icon(LucideIcons.home, fill: 1.0), // Lucide doesn't have fill natively, but we'll stick to basic icons or just use the same
               label: 'Home',
             ),
             BottomNavigationBarItem(
@@ -64,10 +64,6 @@ class _MainScreenState extends State<MainScreen> {
             BottomNavigationBarItem(
               icon: Icon(LucideIcons.crown),
               label: 'Premium',
-            ),
-            BottomNavigationBarItem(
-              icon: Icon(LucideIcons.barChart2),
-              label: 'Cutoffs',
             ),
             BottomNavigationBarItem(
               icon: Icon(LucideIcons.user),

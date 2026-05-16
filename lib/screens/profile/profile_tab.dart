@@ -7,6 +7,10 @@ import '../../main.dart'; // For ThemeProvider
 import '../wishlist/wishlist_tab.dart';
 import '../notifications/notification_screen.dart';
 
+import 'package:supabase_flutter/supabase_flutter.dart';
+
+import '../../providers/auth_service.dart';
+
 class ProfileTab extends StatelessWidget {
   const ProfileTab({super.key});
 
@@ -14,6 +18,12 @@ class ProfileTab extends StatelessWidget {
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
     final themeProvider = Provider.of<ThemeProvider>(context);
+    final authService = Provider.of<AuthService>(context);
+    
+    final user = authService.currentUser;
+    final isGuest = user == null;
+    final userName = user?.userMetadata?['full_name'] ?? 'Student';
+    final userEmail = user?.email ?? 'No email available';
 
     return Scaffold(
       appBar: AppBar(
@@ -39,11 +49,11 @@ class ProfileTab extends StatelessWidget {
                   ),
                   const SizedBox(height: 16),
                   Text(
-                    'Abhinav',
+                    isGuest ? 'Guest User' : userName,
                     style: GoogleFonts.outfit(fontSize: 24, fontWeight: FontWeight.bold),
                   ),
                   Text(
-                    'abhinav@example.com',
+                    isGuest ? 'Sign in to sync your data' : userEmail,
                     style: GoogleFonts.outfit(fontSize: 14, color: Colors.grey),
                   ),
                 ],
@@ -117,34 +127,49 @@ class ProfileTab extends StatelessWidget {
                 'Need help with your preference list or scores?\n\n• Email: support@cuetpredictor.app\n• Response Time: < 2 Hours\n• FAQ: Frequently Asked Questions'
               ),
             ),
-            _buildListTile(
-              context, 
-              icon: LucideIcons.logOut, 
-              title: 'Log Out', 
-              color: Colors.red,
-              onTap: () {
-                showDialog(
-                  context: context,
-                  builder: (context) => AlertDialog(
-                    title: const Text('Log Out?'),
-                    content: const Text('Are you sure you want to log out of your account?'),
-                    actions: [
-                      TextButton(onPressed: () => Navigator.pop(context), child: const Text('Cancel')),
-                      TextButton(
-                        onPressed: () {
-                          // Clear navigation stack and go to AuthScreen
-                          Navigator.of(context).pushAndRemoveUntil(
-                            MaterialPageRoute(builder: (context) => const AuthScreen()),
-                            (route) => false,
-                          );
-                        }, 
-                        child: const Text('Log Out', style: TextStyle(color: Colors.red)),
-                      ),
-                    ],
-                  ),
-                );
-              },
-            ),
+            if (!isGuest)
+              _buildListTile(
+                context, 
+                icon: LucideIcons.logOut, 
+                title: 'Log Out', 
+                color: Colors.red,
+                onTap: () {
+                  showDialog(
+                    context: context,
+                    builder: (context) => AlertDialog(
+                      title: const Text('Log Out?'),
+                      content: const Text('Are you sure you want to log out of your account?'),
+                      actions: [
+                        TextButton(onPressed: () => Navigator.pop(context), child: const Text('Cancel')),
+                        TextButton(
+                          onPressed: () async {
+                            await authService.signOut();
+                            if (context.mounted) {
+                              Navigator.of(context).pushAndRemoveUntil(
+                                MaterialPageRoute(builder: (context) => const AuthScreen()),
+                                (route) => false,
+                              );
+                            }
+                          }, 
+                          child: const Text('Log Out', style: TextStyle(color: Colors.red)),
+                        ),
+                      ],
+                    ),
+                  );
+                },
+              ),
+            if (isGuest)
+              _buildListTile(
+                context, 
+                icon: LucideIcons.logIn, 
+                title: 'Sign In', 
+                onTap: () {
+                  Navigator.of(context).pushAndRemoveUntil(
+                    MaterialPageRoute(builder: (context) => const AuthScreen()),
+                    (route) => false,
+                  );
+                },
+              ),
           ],
         ),
       ),

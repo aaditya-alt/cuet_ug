@@ -2,6 +2,11 @@ import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:lucide_icons/lucide_icons.dart';
 
+import 'package:provider/provider.dart';
+import 'package:supabase_flutter/supabase_flutter.dart';
+import '../../providers/auth_service.dart';
+import 'otp_verification_screen.dart';
+
 class ForgotPasswordScreen extends StatefulWidget {
   const ForgotPasswordScreen({super.key});
 
@@ -13,6 +18,7 @@ class _ForgotPasswordScreenState extends State<ForgotPasswordScreen> {
   final _formKey = GlobalKey<FormState>();
   final _emailController = TextEditingController();
   bool _isSubmitted = false;
+  bool _isLoading = false;
 
   @override
   void dispose() {
@@ -20,10 +26,37 @@ class _ForgotPasswordScreenState extends State<ForgotPasswordScreen> {
     super.dispose();
   }
 
-  void _handleSubmit() {
+  Future<void> _handleSubmit() async {
     if (_formKey.currentState!.validate()) {
-      setState(() => _isSubmitted = true);
-      // Simulate reset email sent
+      setState(() => _isLoading = true);
+      try {
+        final authService = Provider.of<AuthService>(context, listen: false);
+        await authService.resetPassword(_emailController.text.trim());
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(content: Text('OTP sent to your email!'), backgroundColor: Colors.green),
+          );
+          Navigator.of(context).push(
+            MaterialPageRoute(
+              builder: (context) => OtpVerificationScreen(
+                email: _emailController.text.trim(),
+                type: OtpType.recovery,
+              ),
+            ),
+          );
+        }
+      } catch (e) {
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: Text('Failed to send reset link: ${e.toString()}'),
+              backgroundColor: Colors.red,
+            ),
+          );
+        }
+      } finally {
+        if (mounted) setState(() => _isLoading = false);
+      }
     }
   }
 
@@ -109,7 +142,7 @@ class _ForgotPasswordScreenState extends State<ForgotPasswordScreen> {
 
           // Submit Button
           ElevatedButton(
-            onPressed: _handleSubmit,
+            onPressed: _isLoading ? null : _handleSubmit,
             style: ElevatedButton.styleFrom(
               backgroundColor: theme.colorScheme.primary,
               padding: const EdgeInsets.symmetric(vertical: 16),
@@ -117,10 +150,16 @@ class _ForgotPasswordScreenState extends State<ForgotPasswordScreen> {
                 borderRadius: BorderRadius.circular(16),
               ),
             ),
-            child: Text(
-              'Send Reset Link',
-              style: GoogleFonts.outfit(fontSize: 18, fontWeight: FontWeight.bold, color: Colors.white),
-            ),
+            child: _isLoading
+                ? const SizedBox(
+                    height: 20,
+                    width: 20,
+                    child: CircularProgressIndicator(color: Colors.white, strokeWidth: 2),
+                  )
+                : Text(
+                    'Send Reset Link',
+                    style: GoogleFonts.outfit(fontSize: 18, fontWeight: FontWeight.bold, color: Colors.white),
+                  ),
           ),
         ],
       ),

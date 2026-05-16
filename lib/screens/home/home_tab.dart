@@ -5,11 +5,14 @@ import 'package:provider/provider.dart';
 import '../../providers/user_score_provider.dart';
 import '../../providers/cutoff_provider.dart';
 import '../prediction/prediction_results_screen.dart';
+import '../prediction/du_input_screen.dart';
 import '../analytics/analytics_tab.dart';
 import '../wishlist/wishlist_tab.dart';
 import '../timeline/csas_timeline_screen.dart';
 import '../notifications/notification_screen.dart';
 import '../counselling/counselling_guide_screen.dart';
+import '../../providers/navigation_provider.dart';
+import '../../providers/auth_service.dart';
 
 class HomeTab extends StatefulWidget {
   const HomeTab({super.key});
@@ -40,6 +43,10 @@ class _HomeTabState extends State<HomeTab> {
     final theme         = Theme.of(context);
     final scoreProvider = Provider.of<UserScoreProvider>(context);
     final cutoffProvider = Provider.of<CutoffProvider>(context);
+    final authService   = Provider.of<AuthService>(context);
+    
+    final user = authService.currentUser;
+    final userName = user?.userMetadata?['full_name'] ?? 'Student';
 
     final allSubjects = DomainProgramMapping.allSubjects;
 
@@ -58,7 +65,7 @@ class _HomeTabState extends State<HomeTab> {
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
                         Text(
-                          'Hi, Student 👋',
+                          'Hi, $userName 👋',
                           style: GoogleFonts.outfit(
                             fontSize: 26,
                             fontWeight: FontWeight.bold,
@@ -104,222 +111,113 @@ class _HomeTabState extends State<HomeTab> {
               ),
               const SizedBox(height: 32),
 
-              // ── Score Card ──────────────────────────────────────────────
-              Container(
-                decoration: BoxDecoration(
-                  color: theme.cardTheme.color,
-                  borderRadius: BorderRadius.circular(24),
-                  boxShadow: [
-                    BoxShadow(
-                      color: Colors.black.withOpacity(0.06),
-                      blurRadius: 20,
-                      offset: const Offset(0, 10),
+              // ── DU CUET Predictor Launch Card ──────────────────────────────
+              InkWell(
+                onTap: () {
+                  Navigator.push(
+                    context,
+                    MaterialPageRoute(
+                      builder: (_) => const DuInputScreen(),
                     ),
-                  ],
-                ),
-                padding: const EdgeInsets.all(24),
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    // Card header
-                    Row(
-                      children: [
-                        Container(
-                          padding: const EdgeInsets.all(8),
-                          decoration: BoxDecoration(
-                            color: theme.colorScheme.primary.withOpacity(0.1),
-                            borderRadius: BorderRadius.circular(10),
-                          ),
-                          child: Icon(LucideIcons.calculator,
-                              color: theme.colorScheme.primary, size: 20),
-                        ),
-                        const SizedBox(width: 12),
-                        Expanded(
-                          child: Text(
-                            'Enter Your CUET Scores',
-                            style: GoogleFonts.outfit(
-                              fontSize: 18,
-                              fontWeight: FontWeight.bold,
-                            ),
-                            overflow: TextOverflow.ellipsis,
-                          ),
-                        ),
+                  );
+                },
+                borderRadius: BorderRadius.circular(24),
+                child: Container(
+                  decoration: BoxDecoration(
+                    gradient: LinearGradient(
+                      colors: [
+                        theme.colorScheme.primary,
+                        theme.colorScheme.secondary,
                       ],
+                      begin: Alignment.topLeft,
+                      end: Alignment.bottomRight,
                     ),
-                    const SizedBox(height: 8),
-                    Text(
-                      'Scores are out of 200 each. Composite = Language + Domain(s)',
-                      style: GoogleFonts.outfit(
-                          fontSize: 12, color: Colors.grey.shade500),
-                    ),
-                    const SizedBox(height: 24),
-
-                    // ── Language score ─────────────────────────────────
-                    _buildInputLabel('Language (English / Hindi)',
-                        LucideIcons.bookOpen, theme),
-                    const SizedBox(height: 8),
-                    _buildScoreField(
-                      controller: _langController,
-                      hint: '0 – 200',
-                      onChanged: (v) => scoreProvider
-                          .updateLanguageScore(double.tryParse(v) ?? 0),
-                    ),
-                    const SizedBox(height: 20),
-
-                    // ── Domain Subject ─────────────────────────────────
-                    _buildInputLabel('Domain Subject (Primary)',
-                        LucideIcons.layers, theme),
-                    const SizedBox(height: 8),
-                    cutoffProvider.isLoading
-                        ? Center(
-                            child: Padding(
-                            padding: const EdgeInsets.all(12),
-                            child: CircularProgressIndicator(
-                                strokeWidth: 2,
-                                color: theme.colorScheme.primary),
-                          ))
-                        : _buildSubjectDropdown(
-                            context,
-                            allSubjects,
-                            scoreProvider.score.domainSubject,
-                            scoreProvider.updateDomainSubject,
-                            theme,
-                          ),
-                    const SizedBox(height: 12),
-                    _buildScoreField(
-                      controller: _domainController,
-                      hint: 'Score in above subject (0 – 200)',
-                      onChanged: (v) => scoreProvider
-                          .updateDomainScore(double.tryParse(v) ?? 0),
-                    ),
-                    const SizedBox(height: 20),
-
-                    // ── Optional extra domain scores ───────────────────
-                    GestureDetector(
-                      onTap: () =>
-                          setState(() => _showExtraScores = !_showExtraScores),
-                      child: Row(
+                    borderRadius: BorderRadius.circular(24),
+                    boxShadow: [
+                      BoxShadow(
+                        color: theme.colorScheme.primary.withOpacity(0.3),
+                        blurRadius: 20,
+                        offset: const Offset(0, 10),
+                      ),
+                    ],
+                  ),
+                  padding: const EdgeInsets.all(24),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Row(
+                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
                         children: [
-                          Icon(
-                            _showExtraScores
-                                ? LucideIcons.chevronUp
-                                : LucideIcons.chevronDown,
-                            size: 16,
-                            color: theme.colorScheme.primary,
+                          Container(
+                            padding: const EdgeInsets.all(10),
+                            decoration: BoxDecoration(
+                              color: Colors.white.withOpacity(0.2),
+                              borderRadius: BorderRadius.circular(14),
+                            ),
+                            child: const Icon(LucideIcons.sparkles,
+                                color: Colors.white, size: 24),
                           ),
-                          const SizedBox(width: 6),
-                          Text(
-                            _showExtraScores
-                                ? 'Hide additional domain scores'
-                                : 'Add more domain scores (optional)',
-                            style: GoogleFonts.outfit(
-                              fontSize: 13,
-                              color: theme.colorScheme.primary,
-                              fontWeight: FontWeight.w600,
+                          Container(
+                            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+                            decoration: BoxDecoration(
+                              color: Colors.white.withOpacity(0.2),
+                              borderRadius: BorderRadius.circular(20),
+                            ),
+                            child: Text(
+                              'Free',
+                              style: GoogleFonts.inter(
+                                color: Colors.white,
+                                fontSize: 12,
+                                fontWeight: FontWeight.bold,
+                              ),
                             ),
                           ),
                         ],
                       ),
-                    ),
-
-                    if (_showExtraScores) ...[
-                      const SizedBox(height: 16),
+                      const SizedBox(height: 20),
                       Text(
-                        'Domain 2 Score',
-                        style: GoogleFonts.outfit(
-                            fontSize: 13, color: Colors.grey.shade600),
+                        'DU CUET Predictor',
+                        style: GoogleFonts.inter(
+                          fontSize: 24,
+                          fontWeight: FontWeight.bold,
+                          color: Colors.white,
+                        ),
                       ),
                       const SizedBox(height: 8),
-                      _buildScoreField(
-                        controller: _domain2Controller,
-                        hint: '0 – 200',
-                        onChanged: (v) => scoreProvider
-                            .updateDomain2Score(double.tryParse(v) ?? 0),
-                      ),
-                      const SizedBox(height: 12),
                       Text(
-                        'Domain 3 Score',
-                        style: GoogleFonts.outfit(
-                            fontSize: 13, color: Colors.grey.shade600),
+                        'Check your chances in top Delhi University colleges with advanced combination logic based on past cutoffs.',
+                        style: GoogleFonts.inter(
+                          fontSize: 14,
+                          color: Colors.white.withOpacity(0.85),
+                          height: 1.4,
+                        ),
                       ),
-                      const SizedBox(height: 8),
-                      _buildScoreField(
-                        controller: _domain3Controller,
-                        hint: '0 – 200',
-                        onChanged: (v) => scoreProvider
-                            .updateDomain3Score(double.tryParse(v) ?? 0),
+                      const SizedBox(height: 24),
+                      Container(
+                        width: double.infinity,
+                        padding: const EdgeInsets.symmetric(vertical: 16),
+                        decoration: BoxDecoration(
+                          color: Colors.white,
+                          borderRadius: BorderRadius.circular(16),
+                        ),
+                        child: Row(
+                          mainAxisAlignment: MainAxisAlignment.center,
+                          children: [
+                            Text(
+                              'Start Predicting',
+                              style: GoogleFonts.inter(
+                                fontSize: 16,
+                                fontWeight: FontWeight.bold,
+                                color: theme.colorScheme.primary,
+                              ),
+                            ),
+                            const SizedBox(width: 8),
+                            Icon(LucideIcons.arrowRight, color: theme.colorScheme.primary, size: 20),
+                          ],
+                        ),
                       ),
                     ],
-
-                    const SizedBox(height: 24),
-                    const Divider(),
-                    const SizedBox(height: 20),
-
-                    // ── Category + PwD ─────────────────────────────────
-                    Row(
-                      children: [
-                        Expanded(
-                          child: _buildDropdown(
-                            context,
-                            'Category',
-                            scoreProvider.score.category,
-                            ['General', 'OBC', 'SC', 'ST', 'EWS'],
-                            (val) {
-                              if (val != null) scoreProvider.updateCategory(val);
-                            },
-                            theme,
-                          ),
-                        ),
-                        const SizedBox(width: 16),
-                        Expanded(
-                          child: _buildDropdown(
-                            context,
-                            'PwD Quota',
-                            'No',
-                            ['No', 'Yes'],
-                            (val) {
-                              if (val == 'Yes') scoreProvider.updateCategory('PwD');
-                            },
-                            theme,
-                          ),
-                        ),
-                      ],
-                    ),
-                    const SizedBox(height: 32),
-
-                    // ── Score Preview Chip ──────────────────────────────
-                    _buildScorePreview(scoreProvider, theme),
-                    const SizedBox(height: 24),
-
-                    // ── CTA ────────────────────────────────────────────
-                    SizedBox(
-                      width: double.infinity,
-                      child: ElevatedButton.icon(
-                        onPressed: () {
-                          Navigator.push(
-                            context,
-                            MaterialPageRoute(
-                              builder: (_) => const PredictionResultsScreen(),
-                            ),
-                          );
-                        },
-                        style: ElevatedButton.styleFrom(
-                          padding: const EdgeInsets.symmetric(vertical: 16),
-                          shape: RoundedRectangleBorder(
-                            borderRadius: BorderRadius.circular(16),
-                          ),
-                        ),
-                        icon: const Icon(LucideIcons.search, size: 18),
-                        label: Text(
-                          'Predict My Colleges',
-                          style: GoogleFonts.outfit(
-                            fontSize: 18,
-                            fontWeight: FontWeight.bold,
-                          ),
-                        ),
-                      ),
-                    ),
-                  ],
+                  ),
                 ),
               ),
 
@@ -396,10 +294,7 @@ class _HomeTabState extends State<HomeTab> {
                 children: [
                   _buildQuickAction(context, LucideIcons.building, 'Colleges',
                       Colors.blue, onTap: () {
-                    Navigator.push(
-                        context,
-                        MaterialPageRoute(
-                            builder: (_) => const PredictionResultsScreen()));
+                    Provider.of<NavigationProvider>(context, listen: false).setIndex(1);
                   }),
                   const SizedBox(width: 8),
                   _buildQuickAction(context, LucideIcons.bookOpen, 'Cutoffs',
