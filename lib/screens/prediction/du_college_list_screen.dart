@@ -2,21 +2,20 @@ import 'package:cuet/screens/prediction/du_college_detail_screen.dart';
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:lucide_icons/lucide_icons.dart';
+import 'package:provider/provider.dart';
 import '../../models/du_models.dart';
-import '../../providers/du_predictor_service.dart';
+import '../../providers/du_wishlist_provider.dart';
 import 'du_program_list_screen.dart';
 
 class DuCollegeListScreen extends StatefulWidget {
   final List<DuCollegeData> colleges;
   final String category;
-  final int round;
   final int year;
 
   const DuCollegeListScreen({
     super.key,
     required this.colleges,
     required this.category,
-    required this.round,
     required this.year,
   });
 
@@ -26,7 +25,6 @@ class DuCollegeListScreen extends StatefulWidget {
 
 class _DuCollegeListScreenState extends State<DuCollegeListScreen> {
   String _currentCategory = '';
-  int _currentRound = 1;
   bool _isLoading = false;
 
   final List<String> _categories = [
@@ -71,21 +69,11 @@ class _DuCollegeListScreenState extends State<DuCollegeListScreen> {
     super.initState();
     _filteredColleges = widget.colleges;
     _currentCategory = widget.category;
-    _currentRound = widget.round;
   }
 
   Future<void> _updateResults() async {
     setState(() => _isLoading = true);
     try {
-      final service = DuPredictorService();
-      // Note: We need the user's subjects to re-predict.
-      // For now, we assume the initial 'colleges' passed are enough to filter if they only change round.
-      // But if they change category, we need to re-run the whole prediction logic.
-      // However, we don't have userSubjects here.
-      // I will add a 'userSubjects' field to DuCollegeListScreen in a follow up.
-
-      // For now, let's just update the local filtered list if they change round
-      // and show an info that changing category requires returning to input.
       _filter(_searchQuery);
     } finally {
       setState(() => _isLoading = false);
@@ -266,7 +254,7 @@ class _DuCollegeListScreenState extends State<DuCollegeListScreen> {
                           ),
                           const SizedBox(height: 8),
                           Text(
-                            'Try changing the round or category. Also, ensure you have selected at least one Language (List A) subject, as it is mandatory for most DU programs.',
+                            'No colleges found. Try adjusting your category or subjects. Ensure you selected at least one Language (List A) subject, as it is required for most DU programs.',
                             style: GoogleFonts.outfit(color: Colors.grey.shade500, fontSize: 12),
                             textAlign: TextAlign.center,
                           ),
@@ -294,9 +282,7 @@ class _DuCollegeListScreenState extends State<DuCollegeListScreen> {
     ThemeData theme,
     bool isDark,
   ) {
-    // Determine overall chance based on best program's difference
-    final bestProgram =
-        college.programs.first; // they are sorted by difference desc
+    final bestProgram = college.programs.first;
     final double diff = bestProgram.difference;
 
     String chanceLabel;
@@ -312,6 +298,9 @@ class _DuCollegeListScreenState extends State<DuCollegeListScreen> {
       chanceColor = Colors.orange;
       chanceIcon = LucideIcons.alertCircle;
     }
+
+    final wishlist = Provider.of<DuWishlistProvider>(context);
+    final isWishlisted = wishlist.isWishlisted(college.collegeName);
 
     return Card(
       margin: const EdgeInsets.only(bottom: 16),
@@ -337,12 +326,14 @@ class _DuCollegeListScreenState extends State<DuCollegeListScreen> {
                           child: Image.network(
                             college.logoUrl!,
                             fit: BoxFit.contain,
-                            errorBuilder: (context, error, stackTrace) => const Icon(LucideIcons.building2, color: Colors.grey),
+                            errorBuilder: (context, error, stackTrace) =>
+                                const Icon(LucideIcons.building2,
+                                    color: Colors.grey),
                           ),
                         )
                       : const Icon(LucideIcons.building2, color: Colors.grey),
                 ),
-                const SizedBox(width: 16),
+                const SizedBox(width: 12),
                 Expanded(
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
@@ -350,7 +341,7 @@ class _DuCollegeListScreenState extends State<DuCollegeListScreen> {
                       Text(
                         college.collegeName,
                         style: GoogleFonts.outfit(
-                          fontSize: 16,
+                          fontSize: 15,
                           fontWeight: FontWeight.bold,
                         ),
                         maxLines: 2,
@@ -370,31 +361,62 @@ class _DuCollegeListScreenState extends State<DuCollegeListScreen> {
                 // Chance Badge
                 Container(
                   padding: const EdgeInsets.symmetric(
-                    horizontal: 10,
-                    vertical: 6,
-                  ),
+                      horizontal: 8, vertical: 5),
                   decoration: BoxDecoration(
                     color: chanceColor.withOpacity(0.1),
                     borderRadius: BorderRadius.circular(10),
                   ),
                   child: Row(
                     children: [
-                      Icon(chanceIcon, size: 14, color: chanceColor),
+                      Icon(chanceIcon, size: 13, color: chanceColor),
                       const SizedBox(width: 4),
                       Text(
                         chanceLabel,
                         style: GoogleFonts.outfit(
                           color: chanceColor,
                           fontWeight: FontWeight.bold,
-                          fontSize: 12,
+                          fontSize: 11,
                         ),
                       ),
                     ],
                   ),
                 ),
+                // Wishlist heart
+                GestureDetector(
+                  onTap: () {
+                    wishlist.toggle(college);
+                    ScaffoldMessenger.of(context).showSnackBar(
+                      SnackBar(
+                        content: Text(
+                          isWishlisted
+                              ? '${college.collegeName} removed from wishlist'
+                              : '${college.collegeName} added to wishlist ❤️',
+                        ),
+                        behavior: SnackBarBehavior.floating,
+                        duration: const Duration(seconds: 2),
+                      ),
+                    );
+                  },
+                  child: Padding(
+                    padding: const EdgeInsets.only(left: 8),
+                    child: AnimatedSwitcher(
+                      duration: const Duration(milliseconds: 250),
+                      child: Icon(
+                        isWishlisted
+                            ? LucideIcons.heart
+                            : LucideIcons.heart,
+                        key: ValueKey(isWishlisted),
+                        color: isWishlisted
+                            ? Colors.red
+                            : Colors.grey.shade400,
+                        size: 22,
+                      ),
+                    ),
+                  ),
+                ),
               ],
             ),
-            const SizedBox(height: 20),
+            const SizedBox(height: 16),
             Row(
               children: [
                 Expanded(
@@ -406,13 +428,12 @@ class _DuCollegeListScreenState extends State<DuCollegeListScreen> {
                           builder: (_) => DuProgramListScreen(
                             collegeData: college,
                             category: widget.category,
-                            round: widget.round,
                             year: widget.year,
                           ),
                         ),
                       );
                     },
-                    child: const Text('View Programs'),
+                    child: const Text('Programs'),
                   ),
                 ),
                 const SizedBox(width: 12),
@@ -426,13 +447,12 @@ class _DuCollegeListScreenState extends State<DuCollegeListScreen> {
                             builder: (_) => DuCollegeDetailScreen(
                               college: college,
                               category: widget.category,
-                              round: widget.round,
                               year: widget.year,
                             ),
                           ),
                         );
                       },
-                      child: const Text('View Details'),
+                      child: const Text('Details'),
                     ),
                   ),
               ],

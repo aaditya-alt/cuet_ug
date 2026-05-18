@@ -138,7 +138,7 @@ class _CollegeDetailsScreenState extends State<CollegeDetailsScreen> {
                 '🏆 NIRF Rank: #${college.nirfRanking}\n'
                 '🎓 Courses: ${college.courses.map((c) => c.courseName).take(3).join(", ")}...\n\n'
                 'Open in App: cuet://college/${college.id}\n'
-                'Or view on Web: https://cuetpredictor.app/college/${college.id}';
+                'Or view on Web: https://cuet.collegemitra.net.in/college/${college.id}';
             Share.share(text);
           },
         ),

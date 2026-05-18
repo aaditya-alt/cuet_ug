@@ -145,7 +145,6 @@ class _DuCollegeDiscoveryScreenState extends State<DuCollegeDiscoveryScreen> {
             builder: (_) => DuCollegeDetailScreen(
               college: college,
               category: 'UR',
-              round: 1,
               year: 2025,
             ),
           ),

@@ -1,6 +1,8 @@
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:lucide_icons/lucide_icons.dart';
+import 'package:provider/provider.dart';
+import '../../providers/notification_service.dart';
 
 class NotificationScreen extends StatefulWidget {
   const NotificationScreen({super.key});
@@ -10,74 +12,62 @@ class NotificationScreen extends StatefulWidget {
 }
 
 class _NotificationScreenState extends State<NotificationScreen> {
-  final List<Map<String, dynamic>> _notifications = [
-    {
-      'id': 1,
-      'icon': LucideIcons.bellRing,
-      'iconColor': Colors.blue,
-      'title': 'Round 2 Results Out!',
-      'description': 'The CSAS Round 2 seat allocation list has been released. Check your dashboard now to see if you have been allotted a seat in your preferred college.',
-      'fullDetails': 'DU has released the second round of allocations for 71,000+ seats. You have until August 30th to accept the allocation. Failure to accept will result in removal from the CSAS process.',
-      'time': '2h ago',
-      'isUnread': true,
-    },
-    {
-      'id': 2,
-      'icon': LucideIcons.sparkles,
-      'iconColor': Colors.purple,
-      'title': '99% Accuracy Reached',
-      'description': 'Our AI model has been updated with the latest data from Day 3 of admissions.',
-      'fullDetails': 'Based on the latest trends in B.Com (Hons) and Economics (Hons), our prediction accuracy has improved significantly. We recommend re-checking your "High Chance" college list.',
-      'time': '5h ago',
-      'isUnread': true,
-    },
-    {
-      'id': 3,
-      'icon': LucideIcons.info,
-      'iconColor': Colors.orange,
-      'title': 'Payment Successful',
-      'description': 'Your Premium Season Pass has been activated. Enjoy all features!',
-      'fullDetails': 'You now have access to Detailed Cutoff Trends, AI Choice Filling Assistant, and Direct Mentor Support for the entire 2026 session.',
-      'time': '1d ago',
-      'isUnread': false,
-    },
-    {
-      'id': 4,
-      'icon': LucideIcons.heart,
-      'iconColor': Colors.red,
-      'title': 'College Added to Wishlist',
-      'description': 'Hindu College - B.A. (Hons.) Economics has been added to your preference list.',
-      'fullDetails': 'This college has consistently ranked #1 in NIRF. Your current score puts you in the "Medium Chance" category for this specific program.',
-      'time': '1d ago',
-      'isUnread': false,
-    },
-    {
-      'id': 5,
-      'icon': LucideIcons.userPlus,
-      'iconColor': Colors.green,
-      'title': 'Welcome to CUET Predictor!',
-      'description': 'Complete your profile to get more accurate college recommendations.',
-      'fullDetails': 'By providing your category (EWS/OBC/SC/ST) and gender details, we can refine our results by up to 40% accuracy.',
-      'time': '3d ago',
-      'isUnread': false,
-    },
-  ];
-
-  void _markAllAsRead() {
-    setState(() {
-      for (var n in _notifications) {
-        n['isUnread'] = false;
+  @override
+  void initState() {
+    super.initState();
+    // Refresh notifications when entering the screen
+    Future.microtask(() {
+      if (mounted) {
+        Provider.of<NotificationService>(context, listen: false).fetchNotifications();
       }
     });
-    ScaffoldMessenger.of(context).showSnackBar(
-      const SnackBar(content: Text('All notifications marked as read')),
-    );
+  }
+
+  IconData _getIconForNotification(String title, String desc) {
+    final t = title.toLowerCase();
+    final d = desc.toLowerCase();
+    if (t.contains('result') || t.contains('cutoff') || t.contains('csas') || t.contains('round')) {
+      return LucideIcons.bellRing;
+    } else if (t.contains('accuracy') || t.contains('model') || t.contains('update') || t.contains('guide')) {
+      return LucideIcons.sparkles;
+    } else if (t.contains('payment') || t.contains('premium') || t.contains('crown')) {
+      return LucideIcons.crown;
+    } else if (t.contains('wishlist') || t.contains('favorite') || t.contains('heart')) {
+      return LucideIcons.heart;
+    }
+    return LucideIcons.info;
+  }
+
+  Color _getIconColorForNotification(String title) {
+    final t = title.toLowerCase();
+    if (t.contains('result') || t.contains('cutoff') || t.contains('csas') || t.contains('round')) {
+      return Colors.blue;
+    } else if (t.contains('accuracy') || t.contains('model') || t.contains('update') || t.contains('guide')) {
+      return Colors.purple;
+    } else if (t.contains('payment') || t.contains('premium') || t.contains('crown')) {
+      return Colors.orange;
+    } else if (t.contains('wishlist') || t.contains('favorite') || t.contains('heart')) {
+      return Colors.red;
+    }
+    return Colors.teal;
+  }
+
+  String _formatTimeAgo(DateTime dateTime) {
+    final difference = DateTime.now().difference(dateTime);
+    if (difference.inMinutes < 60) {
+      return '${difference.inMinutes}m ago';
+    } else if (difference.inHours < 24) {
+      return '${difference.inHours}h ago';
+    } else {
+      return '${difference.inDays}d ago';
+    }
   }
 
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
     final isDark = theme.brightness == Brightness.dark;
+    final notificationService = Provider.of<NotificationService>(context);
 
     return Scaffold(
       backgroundColor: isDark ? const Color(0xFF0A0E14) : const Color(0xFFF8F9FF),
@@ -85,22 +75,42 @@ class _NotificationScreenState extends State<NotificationScreen> {
         title: Text('Notifications', style: GoogleFonts.outfit(fontWeight: FontWeight.bold)),
         centerTitle: true,
         actions: [
-          IconButton(
-            icon: const Icon(LucideIcons.checkCheck, size: 20),
-            onPressed: _markAllAsRead,
-            tooltip: 'Mark all as read',
-          ),
+          if (notificationService.notifications.isNotEmpty)
+            IconButton(
+              icon: const Icon(LucideIcons.checkCheck, size: 20),
+              onPressed: () {
+                notificationService.markAllAsRead();
+                ScaffoldMessenger.of(context).showSnackBar(
+                  const SnackBar(
+                    content: Text('All notifications marked as read'),
+                    behavior: SnackBarBehavior.floating,
+                  ),
+                );
+              },
+              tooltip: 'Mark all as read',
+            ),
         ],
       ),
-      body: ListView(
-        padding: const EdgeInsets.all(20),
-        children: [
-          _buildSectionHeader('Recent'),
-          ..._notifications.map((n) => _NotificationItem(
-                notification: n,
-                onRead: () => setState(() => n['isUnread'] = false),
-              )),
-        ],
+      body: RefreshIndicator(
+        onRefresh: () => notificationService.fetchNotifications(),
+        child: notificationService.isLoading && notificationService.notifications.isEmpty
+            ? const Center(child: CircularProgressIndicator())
+            : notificationService.notifications.isEmpty
+                ? _buildEmptyState()
+                : ListView(
+                    padding: const EdgeInsets.all(20),
+                    physics: const AlwaysScrollableScrollPhysics(),
+                    children: [
+                      _buildSectionHeader('Recent Updates'),
+                      ...notificationService.notifications.map((n) => _NotificationItem(
+                            notification: n,
+                            icon: _getIconForNotification(n.mainText, n.description),
+                            iconColor: _getIconColorForNotification(n.mainText),
+                            timeStr: _formatTimeAgo(n.createdAt),
+                            onRead: () => notificationService.markAsRead(n.id),
+                          )),
+                    ],
+                  ),
       ),
     );
   }
@@ -119,13 +129,64 @@ class _NotificationScreenState extends State<NotificationScreen> {
       ),
     );
   }
+
+  Widget _buildEmptyState() {
+    return Center(
+      child: SingleChildScrollView(
+        physics: const AlwaysScrollableScrollPhysics(),
+        child: Column(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            Container(
+              padding: const EdgeInsets.all(24),
+              decoration: BoxDecoration(
+                color: Colors.blue.withOpacity(0.1),
+                shape: BoxShape.circle,
+              ),
+              child: const Icon(LucideIcons.bellOff, size: 64, color: Colors.blue),
+            ),
+            const SizedBox(height: 24),
+            Text(
+              'No Notifications Yet',
+              style: GoogleFonts.outfit(
+                fontSize: 20,
+                fontWeight: FontWeight.bold,
+              ),
+            ),
+            const SizedBox(height: 12),
+            Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 40),
+              child: Text(
+                'When DU releases new updates or seat allocations, you will see them here first!',
+                textAlign: TextAlign.center,
+                style: GoogleFonts.outfit(
+                  color: Colors.grey,
+                  fontSize: 14,
+                  height: 1.5,
+                ),
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
 }
 
 class _NotificationItem extends StatefulWidget {
-  final Map<String, dynamic> notification;
+  final DbNotification notification;
+  final IconData icon;
+  final Color iconColor;
+  final String timeStr;
   final VoidCallback onRead;
 
-  const _NotificationItem({required this.notification, required this.onRead});
+  const _NotificationItem({
+    required this.notification,
+    required this.icon,
+    required this.iconColor,
+    required this.timeStr,
+    required this.onRead,
+  });
 
   @override
   State<_NotificationItem> createState() => _NotificationItemState();
@@ -139,7 +200,7 @@ class _NotificationItemState extends State<_NotificationItem> {
     final theme = Theme.of(context);
     final isDark = theme.brightness == Brightness.dark;
     final n = widget.notification;
-    final isUnread = n['isUnread'];
+    final isUnread = n.isUnread;
 
     return AnimatedContainer(
       duration: const Duration(milliseconds: 300),
@@ -188,10 +249,10 @@ class _NotificationItemState extends State<_NotificationItem> {
                         Container(
                           padding: const EdgeInsets.all(10),
                           decoration: BoxDecoration(
-                            color: n['iconColor'].withOpacity(0.1),
+                            color: widget.iconColor.withOpacity(0.1),
                             shape: BoxShape.circle,
                           ),
-                          child: Icon(n['icon'], color: n['iconColor'], size: 20),
+                          child: Icon(widget.icon, color: widget.iconColor, size: 20),
                         ),
                         if (isUnread)
                           Positioned(
@@ -219,7 +280,7 @@ class _NotificationItemState extends State<_NotificationItem> {
                             children: [
                               Expanded(
                                 child: Text(
-                                  n['title'],
+                                  n.mainText,
                                   style: GoogleFonts.outfit(
                                     fontSize: 16,
                                     fontWeight: isUnread ? FontWeight.bold : FontWeight.w600,
@@ -227,14 +288,14 @@ class _NotificationItemState extends State<_NotificationItem> {
                                 ),
                               ),
                               Text(
-                                n['time'],
+                                widget.timeStr,
                                 style: GoogleFonts.outfit(fontSize: 12, color: Colors.grey),
                               ),
                             ],
                           ),
                           const SizedBox(height: 4),
                           Text(
-                            n['description'],
+                            n.subText,
                             maxLines: _isExpanded ? 10 : 2,
                             overflow: TextOverflow.ellipsis,
                             style: GoogleFonts.outfit(
@@ -260,7 +321,7 @@ class _NotificationItemState extends State<_NotificationItem> {
                     child: Divider(height: 1),
                   ),
                   Text(
-                    n['fullDetails'],
+                    n.description,
                     style: GoogleFonts.outfit(
                       fontSize: 14,
                       color: isDark ? Colors.white70 : Colors.black87,
@@ -271,17 +332,6 @@ class _NotificationItemState extends State<_NotificationItem> {
                   Row(
                     mainAxisAlignment: MainAxisAlignment.end,
                     children: [
-                      TextButton(
-                        onPressed: () {},
-                        style: TextButton.styleFrom(
-                          foregroundColor: theme.colorScheme.primary,
-                        ),
-                        child: Text(
-                          'View Details',
-                          style: GoogleFonts.outfit(fontWeight: FontWeight.bold),
-                        ),
-                      ),
-                      const SizedBox(width: 8),
                       ElevatedButton(
                         onPressed: () {
                           setState(() {

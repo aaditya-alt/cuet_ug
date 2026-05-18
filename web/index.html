@@ -18,21 +18,221 @@
 
   <meta charset="UTF-8">
   <meta content="IE=Edge" http-equiv="X-UA-Compatible">
-  <meta name="description" content="A new Flutter project.">
+  <meta name="description" content="DU CUET UG College Predictor 2025 by College Mitra. Predict your dream Delhi University colleges with 99% accuracy using real Round 1 admission cutoff trends.">
 
   <!-- iOS meta tags & icons -->
   <meta name="mobile-web-app-capable" content="yes">
   <meta name="apple-mobile-web-app-status-bar-style" content="black">
-  <meta name="apple-mobile-web-app-title" content="cuet">
+  <meta name="apple-mobile-web-app-title" content="DUVerse">
   <link rel="apple-touch-icon" href="icons/Icon-192.png">
 
   <!-- Favicon -->
   <link rel="icon" type="image/png" href="favicon.png"/>
 
-  <title>cuet</title>
+  <title>DUVerse - Delhi University Cutoffs & Choice Filling Assistant</title>
   <link rel="manifest" href="manifest.json">
+
+  <!-- Google Fonts & Styling for Gateway -->
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;600;700&display=swap" rel="stylesheet">
+  <style>
+    body {
+      margin: 0;
+      padding: 0;
+      background-color: #0b0f19;
+      font-family: 'Outfit', sans-serif;
+    }
+    
+    #gateway-overlay {
+      position: fixed;
+      top: 0;
+      left: 0;
+      width: 100vw;
+      height: 100vh;
+      background: linear-gradient(135deg, #0b0f19 0%, #111827 100%);
+      display: flex;
+      justify-content: center;
+      align-items: center;
+      z-index: 999999;
+      opacity: 1;
+      transition: opacity 0.5s ease;
+      padding: 20px;
+      box-sizing: border-box;
+    }
+    
+    .gateway-card {
+      background: rgba(255, 255, 255, 0.03);
+      backdrop-filter: blur(20px);
+      -webkit-backdrop-filter: blur(20px);
+      border: 1px solid rgba(255, 255, 255, 0.08);
+      border-radius: 28px;
+      padding: 40px;
+      max-width: 440px;
+      width: 100%;
+      text-align: center;
+      box-shadow: 0 20px 50px rgba(0, 0, 0, 0.4);
+      transform: translateY(20px);
+      animation: slideUp 0.6s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+      color: #ffffff;
+    }
+
+    @keyframes slideUp {
+      to {
+        transform: translateY(0);
+        opacity: 1;
+      }
+    }
+    
+    .logo-container {
+      width: 90px;
+      height: 90px;
+      margin: 0 auto 24px;
+      background: linear-gradient(135deg, #4f46e5 0%, #7c3aed 100%);
+      border-radius: 24px;
+      padding: 3px;
+      box-shadow: 0 8px 24px rgba(124, 58, 237, 0.3);
+      display: flex;
+      justify-content: center;
+      align-items: center;
+    }
+    
+    .app-logo {
+      width: 100%;
+      height: 100%;
+      border-radius: 21px;
+      object-fit: cover;
+    }
+    
+    .gateway-title {
+      font-size: 26px;
+      font-weight: 700;
+      margin: 0 0 4px;
+      letter-spacing: -0.5px;
+      background: linear-gradient(135deg, #ffffff 0%, #d1d5db 100%);
+      -webkit-background-clip: text;
+      -webkit-text-fill-color: transparent;
+    }
+    
+    .gateway-subtitle {
+      font-size: 14px;
+      font-weight: 600;
+      color: #a78bfa;
+      margin: 0 0 20px;
+      text-transform: uppercase;
+      letter-spacing: 1.5px;
+    }
+    
+    .divider {
+      height: 1px;
+      background: linear-gradient(90deg, rgba(255,255,255,0) 0%, rgba(255,255,255,0.1) 50%, rgba(255,255,255,0) 100%);
+      margin-bottom: 20px;
+    }
+    
+    .gateway-message {
+      font-size: 15px;
+      line-height: 1.6;
+      color: #9ca3af;
+      margin: 0 0 32px;
+      font-weight: 300;
+    }
+    
+    .btn-download {
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      width: 100%;
+      padding: 16px 24px;
+      background: linear-gradient(135deg, #4f46e5 0%, #7c3aed 100%);
+      color: #ffffff;
+      font-size: 16px;
+      font-weight: 600;
+      text-decoration: none;
+      border-radius: 16px;
+      box-shadow: 0 4px 15px rgba(124, 58, 237, 0.35);
+      transition: all 0.3s ease;
+      box-sizing: border-box;
+      margin-bottom: 14px;
+      cursor: pointer;
+      border: none;
+    }
+    
+    .btn-download:hover {
+      transform: translateY(-2px);
+      box-shadow: 0 6px 20px rgba(124, 58, 237, 0.45);
+      background: linear-gradient(135deg, #4338ca 0%, #6d28d9 100%);
+    }
+
+    .btn-download:active {
+      transform: translateY(0);
+    }
+    
+    .btn-web {
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      width: 100%;
+      padding: 15px 24px;
+      background: transparent;
+      color: #d1d5db;
+      font-size: 15px;
+      font-weight: 500;
+      border: 1px solid rgba(255, 255, 255, 0.15);
+      border-radius: 16px;
+      transition: all 0.3s ease;
+      box-sizing: border-box;
+      cursor: pointer;
+    }
+    
+    .btn-web:hover {
+      background: rgba(255, 255, 255, 0.05);
+      color: #ffffff;
+      border-color: rgba(255, 255, 255, 0.3);
+    }
+  </style>
 </head>
 <body>
+  <!-- Beautiful Premium Download App / Continue on Web Gateway -->
+  <div id="gateway-overlay">
+    <div class="gateway-card">
+      <div class="logo-container">
+        <img src="favicon.png" alt="App Logo" class="app-logo">
+      </div>
+      
+      <h1 class="gateway-title">DUVerse</h1>
+      <p class="gateway-subtitle">by College Mitra</p>
+      
+      <div class="divider"></div>
+      
+      <p class="gateway-message">
+        For the fastest composite score calculation, real-time admission notifications, and seamless offline access, download our official Android app!
+      </p>
+      
+      <!-- Download Android App Button -->
+      <a href="https://cuet.collegemitra.net.in/app-release.apk" class="btn-download" target="_blank">
+        <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="margin-right: 8px;"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
+        Download Android App
+      </a>
+      
+      <!-- Continue on Web Option -->
+      <button class="btn-web" onclick="continueToWeb()">
+        Continue on Web
+        <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="margin-left: 6px;"><line x1="5" y1="12" x2="19" y2="12"/><polyline points="12 5 19 12 12 19"/></svg>
+      </button>
+    </div>
+  </div>
+
+  <script>
+    function continueToWeb() {
+      var overlay = document.getElementById('gateway-overlay');
+      overlay.style.opacity = '0';
+      overlay.style.pointerEvents = 'none';
+      setTimeout(function() {
+        overlay.style.display = 'none';
+      }, 500);
+    }
+  </script>
+
   <!--
     You can customize the "flutter_bootstrap.js" script.
     This is useful to provide a custom configuration to the Flutter loader

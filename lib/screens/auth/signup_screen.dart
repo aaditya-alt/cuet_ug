@@ -57,6 +57,20 @@ class _SignUpScreenState extends State<SignUpScreen> {
           fullName: _nameController.text.trim(),
         );
 
+        // Insert additional metadata to public.users table in Supabase
+        try {
+          await Supabase.instance.client.from('users').insert({
+            'name': _nameController.text.trim(),
+            'email': _emailController.text.trim(),
+            'phone': num.tryParse(_phoneController.text.trim()),
+            'course': _selectedCourse,
+          });
+          debugPrint('User stored successfully in Supabase users table.');
+        } catch (dbError) {
+          debugPrint('Failed to store user in Supabase users table: $dbError');
+          // Catch and print the error, but do not block the user from accessing the OTP screen
+        }
+
         final prefs = await SharedPreferences.getInstance();
         await prefs.setBool('guest_mode', false);
 

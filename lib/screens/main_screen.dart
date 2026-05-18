@@ -5,13 +5,15 @@ import '../providers/navigation_provider.dart';
 
 // Placeholder imports for tabs
 import 'home/home_tab.dart';
-import 'prediction/prediction_results_screen.dart'; 
+import 'prediction/prediction_results_screen.dart';
 import 'prediction/du_input_screen.dart';
 import 'prediction/du_college_discovery_screen.dart';
 import 'wishlist/wishlist_tab.dart';
 import 'analytics/analytics_tab.dart';
 import 'profile/profile_tab.dart';
 import 'premium/premium_screen.dart';
+import '../providers/app_settings_provider.dart';
+import '../main.dart';
 
 class MainScreen extends StatefulWidget {
   const MainScreen({super.key});
@@ -21,22 +23,43 @@ class MainScreen extends StatefulWidget {
 }
 
 class _MainScreenState extends State<MainScreen> {
-  final List<Widget> _tabs = [
-    const HomeTab(),
-    const DuCollegeDiscoveryScreen(), 
-    const PremiumScreen(),
-    const ProfileTab(),
-  ];
+  @override
+  void initState() {
+    super.initState();
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      final pendingLink = MyApp.pendingDeepLink;
+      if (pendingLink != null) {
+        MyApp.pendingDeepLink = null;
+        MyApp.handleRawLink(pendingLink);
+      }
+    });
+  }
 
   @override
   Widget build(BuildContext context) {
     final navProvider = Provider.of<NavigationProvider>(context);
+    final appSettings = Provider.of<AppSettingsProvider>(context);
+
+    // Build tabs dynamically based on admin config
+    final List<Widget> activeTabs = [
+      const HomeTab(),
+      const DuCollegeDiscoveryScreen(),
+      if (appSettings.premiumEnabled) const PremiumScreen(),
+      const ProfileTab(),
+    ];
+
+    // Safely clamp/validate index
+    int activeIndex = navProvider.currentIndex;
+    if (activeIndex >= activeTabs.length) {
+      activeIndex = activeTabs.length - 1;
+      // Schedule to run after the current frame to update provider index
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        navProvider.setIndex(activeIndex);
+      });
+    }
 
     return Scaffold(
-      body: IndexedStack(
-        index: navProvider.currentIndex,
-        children: _tabs,
-      ),
+      body: IndexedStack(index: activeIndex, children: activeTabs),
       bottomNavigationBar: Container(
         decoration: BoxDecoration(
           boxShadow: [
@@ -48,24 +71,25 @@ class _MainScreenState extends State<MainScreen> {
           ],
         ),
         child: BottomNavigationBar(
-          currentIndex: navProvider.currentIndex,
+          currentIndex: activeIndex,
           onTap: (index) {
             navProvider.setIndex(index);
           },
-          items: const [
-            BottomNavigationBarItem(
+          items: [
+            const BottomNavigationBarItem(
               icon: Icon(LucideIcons.home),
               label: 'Home',
             ),
-            BottomNavigationBarItem(
+            const BottomNavigationBarItem(
               icon: Icon(LucideIcons.building2),
               label: 'Colleges',
             ),
-            BottomNavigationBarItem(
-              icon: Icon(LucideIcons.crown),
-              label: 'Premium',
-            ),
-            BottomNavigationBarItem(
+            if (appSettings.premiumEnabled)
+              const BottomNavigationBarItem(
+                icon: Icon(LucideIcons.crown),
+                label: 'Premium',
+              ),
+            const BottomNavigationBarItem(
               icon: Icon(LucideIcons.user),
               label: 'Profile',
             ),

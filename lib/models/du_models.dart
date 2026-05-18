@@ -20,6 +20,8 @@ class DuProgramResult {
   final double? originalScore; // raw score before scaling (e.g. 500)
   final int? originalTotal; // raw total before scaling (e.g. 750)
   final bool isScaled; // whether the score was scaled to 1000
+  final String chance; // Safe / Moderate / Difficult / Out of Range
+  final String? note; // Priority note or other details
 
   DuProgramResult({
     required this.programName,
@@ -31,6 +33,8 @@ class DuProgramResult {
     this.originalScore,
     this.originalTotal,
     this.isScaled = false,
+    this.chance = 'Safe',
+    this.note,
   });
 }
 

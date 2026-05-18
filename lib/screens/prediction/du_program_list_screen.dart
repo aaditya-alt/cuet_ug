@@ -6,14 +6,12 @@ import '../../models/du_models.dart';
 class DuProgramListScreen extends StatefulWidget {
   final DuCollegeData collegeData;
   final String category;
-  final int round;
   final int year;
 
   const DuProgramListScreen({
     super.key,
     required this.collegeData,
     required this.category,
-    required this.round,
     required this.year,
   });
 
@@ -32,8 +30,12 @@ class _DuProgramListScreenState extends State<DuProgramListScreen> {
     final programs = _searchQuery.isEmpty
         ? widget.collegeData.programs
         : widget.collegeData.programs
-            .where((p) => p.programName.toLowerCase().contains(_searchQuery.toLowerCase()))
-            .toList();
+              .where(
+                (p) => p.programName.toLowerCase().contains(
+                  _searchQuery.toLowerCase(),
+                ),
+              )
+              .toList();
 
     return Scaffold(
       body: CustomScrollView(
@@ -75,7 +77,10 @@ class _DuProgramListScreenState extends State<DuProgramListScreen> {
                             ),
                             child: ClipRRect(
                               borderRadius: BorderRadius.circular(12),
-                              child: Image.network(widget.collegeData.logoUrl!, fit: BoxFit.contain),
+                              child: Image.network(
+                                widget.collegeData.logoUrl!,
+                                fit: BoxFit.contain,
+                              ),
                             ),
                           ),
                         Text(
@@ -112,24 +117,44 @@ class _DuProgramListScreenState extends State<DuProgramListScreen> {
                   Container(
                     padding: const EdgeInsets.all(12),
                     decoration: BoxDecoration(
-                      color: isDark ? Colors.grey.shade900 : Colors.blue.shade50,
+                      color: isDark
+                          ? Colors.grey.shade900
+                          : Colors.blue.shade50,
                       borderRadius: BorderRadius.circular(12),
-                      border: Border.all(color: isDark ? Colors.grey.shade800 : Colors.blue.shade100),
+                      border: Border.all(
+                        color: isDark
+                            ? Colors.grey.shade800
+                            : Colors.blue.shade100,
+                      ),
                     ),
                     child: Row(
                       children: [
-                        Icon(LucideIcons.user, size: 16, color: theme.colorScheme.primary),
+                        Icon(
+                          LucideIcons.user,
+                          size: 16,
+                          color: theme.colorScheme.primary,
+                        ),
                         const SizedBox(width: 8),
-                        Text('${widget.category} Category', style: GoogleFonts.outfit(fontSize: 14)),
+                        Text(
+                          '${widget.category} Category',
+                          style: GoogleFonts.outfit(fontSize: 14),
+                        ),
                         const Spacer(),
-                        Icon(LucideIcons.calendar, size: 16, color: theme.colorScheme.primary),
+                        Icon(
+                          LucideIcons.calendar,
+                          size: 16,
+                          color: theme.colorScheme.primary,
+                        ),
                         const SizedBox(width: 8),
-                        Text('Round ${widget.round} (${widget.year})', style: GoogleFonts.outfit(fontSize: 14)),
+                        Text(
+                          'Best of All Rounds (${widget.year})',
+                          style: GoogleFonts.outfit(fontSize: 14),
+                        ),
                       ],
                     ),
                   ),
                   const SizedBox(height: 16),
-                  
+
                   // Search
                   TextField(
                     onChanged: (v) => setState(() => _searchQuery = v),
@@ -149,23 +174,25 @@ class _DuProgramListScreenState extends State<DuProgramListScreen> {
           SliverPadding(
             padding: const EdgeInsets.symmetric(horizontal: 16),
             sliver: SliverList(
-              delegate: SliverChildBuilderDelegate(
-                (context, index) {
-                  final program = programs[index];
-                  return _buildProgramCard(context, program, theme, isDark);
-                },
-                childCount: programs.length,
-              ),
+              delegate: SliverChildBuilderDelegate((context, index) {
+                final program = programs[index];
+                return _buildProgramCard(context, program, theme, isDark);
+              }, childCount: programs.length),
             ),
           ),
-          
+
           const SliverToBoxAdapter(child: SizedBox(height: 40)),
         ],
       ),
     );
   }
 
-  Widget _buildProgramCard(BuildContext context, DuProgramResult program, ThemeData theme, bool isDark) {
+  Widget _buildProgramCard(
+    BuildContext context,
+    DuProgramResult program,
+    ThemeData theme,
+    bool isDark,
+  ) {
     final diff = program.difference;
     final diffText = diff >= 0 ? '+${diff.toInt()}' : diff.toInt().toString();
     final diffColor = diff >= 0 ? Colors.green : Colors.orange;
@@ -180,32 +207,92 @@ class _DuProgramListScreenState extends State<DuProgramListScreen> {
           title: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              Container(
-                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-                decoration: BoxDecoration(
-                  color: theme.colorScheme.primary.withOpacity(0.1),
-                  borderRadius: BorderRadius.circular(6),
-                ),
-                child: Text(
-                  program.degree.isNotEmpty ? program.degree : 'Degree',
-                  style: GoogleFonts.outfit(fontSize: 10, color: theme.colorScheme.primary, fontWeight: FontWeight.bold),
-                ),
+              Row(
+                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                children: [
+                  Container(
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 8,
+                      vertical: 4,
+                    ),
+                    decoration: BoxDecoration(
+                      color: theme.colorScheme.primary.withOpacity(0.1),
+                      borderRadius: BorderRadius.circular(6),
+                    ),
+                    child: Text(
+                      program.degree.isNotEmpty ? program.degree : 'Degree',
+                      style: GoogleFonts.outfit(
+                        fontSize: 10,
+                        color: theme.colorScheme.primary,
+                        fontWeight: FontWeight.bold,
+                      ),
+                    ),
+                  ),
+                  _buildChanceBadge(program.chance),
+                ],
               ),
               const SizedBox(height: 8),
               Text(
                 program.programName,
-                style: GoogleFonts.outfit(fontSize: 16, fontWeight: FontWeight.bold),
+                style: GoogleFonts.outfit(
+                  fontSize: 16,
+                  fontWeight: FontWeight.bold,
+                ),
               ),
             ],
           ),
           subtitle: Padding(
             padding: const EdgeInsets.only(top: 12),
-            child: Row(
-              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                _buildScoreCol('Your Score', program.userScore.toInt().toString(), theme.colorScheme.primary),
-                _buildScoreCol('Cutoff', program.cutoffScore.toInt().toString(), Colors.grey.shade600),
-                _buildScoreCol('Gap', diffText, diffColor),
+                Row(
+                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                  children: [
+                    _buildScoreCol(
+                      'Your Score',
+                      program.userScore.toInt().toString(),
+                      theme.colorScheme.primary,
+                    ),
+                    _buildScoreCol(
+                      'Cutoff',
+                      program.cutoffScore.toInt().toString(),
+                      Colors.grey.shade600,
+                    ),
+                    _buildScoreCol('Gap', diffText, diffColor),
+                  ],
+                ),
+                if (program.note != null) ...[
+                  const SizedBox(height: 12),
+                  Container(
+                    padding: const EdgeInsets.all(8),
+                    decoration: BoxDecoration(
+                      color: Colors.red.withOpacity(0.05),
+                      borderRadius: BorderRadius.circular(8),
+                      border: Border.all(color: Colors.red.withOpacity(0.1)),
+                    ),
+                    child: Row(
+                      children: [
+                        const Icon(
+                          LucideIcons.alertTriangle,
+                          color: Colors.orange,
+                          size: 14,
+                        ),
+                        const SizedBox(width: 8),
+                        Expanded(
+                          child: Text(
+                            program.note!,
+                            style: GoogleFonts.outfit(
+                              fontSize: 11,
+                              color: Colors.orange.shade800,
+                              fontWeight: FontWeight.w500,
+                            ),
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                ],
               ],
             ),
           ),
@@ -214,12 +301,20 @@ class _DuProgramListScreenState extends State<DuProgramListScreen> {
             const SizedBox(height: 12),
             Align(
               alignment: Alignment.centerLeft,
-              child: Text('Round-wise Cutoffs (${widget.year})', 
-                style: GoogleFonts.outfit(fontSize: 14, fontWeight: FontWeight.bold)),
+              child: Text(
+                'Round-wise Cutoffs (${widget.year})',
+                style: GoogleFonts.outfit(
+                  fontSize: 14,
+                  fontWeight: FontWeight.bold,
+                ),
+              ),
             ),
             const SizedBox(height: 12),
             if (program.roundCutoffs.isEmpty)
-              Text('No round history available.', style: GoogleFonts.outfit(color: Colors.grey, fontSize: 12))
+              Text(
+                'No round history available.',
+                style: GoogleFonts.outfit(color: Colors.grey, fontSize: 12),
+              )
             else
               SizedBox(
                 height: 90,
@@ -234,9 +329,17 @@ class _DuProgramListScreenState extends State<DuProgramListScreen> {
                       width: 140,
                       padding: const EdgeInsets.all(12),
                       decoration: BoxDecoration(
-                        color: isDark ? Colors.grey.shade900 : Colors.grey.shade50,
+                        color: isDark
+                            ? Colors.grey.shade900
+                            : Colors.grey.shade50,
                         borderRadius: BorderRadius.circular(12),
-                        border: Border.all(color: qualified ? Colors.green.withOpacity(0.5) : (isDark ? Colors.grey.shade800 : Colors.grey.shade200)),
+                        border: Border.all(
+                          color: qualified
+                              ? Colors.green.withOpacity(0.5)
+                              : (isDark
+                                    ? Colors.grey.shade800
+                                    : Colors.grey.shade200),
+                        ),
                       ),
                       child: Column(
                         crossAxisAlignment: CrossAxisAlignment.start,
@@ -245,13 +348,31 @@ class _DuProgramListScreenState extends State<DuProgramListScreen> {
                           Row(
                             mainAxisAlignment: MainAxisAlignment.spaceBetween,
                             children: [
-                              Text('Round ${rc.round}', style: GoogleFonts.outfit(fontSize: 12, fontWeight: FontWeight.bold, color: Colors.grey)),
-                              Icon(qualified ? LucideIcons.checkCircle2 : LucideIcons.xCircle, 
-                                size: 14, color: qualified ? Colors.green : Colors.red),
+                              Text(
+                                'Round ${rc.round}',
+                                style: GoogleFonts.outfit(
+                                  fontSize: 12,
+                                  fontWeight: FontWeight.bold,
+                                  color: Colors.grey,
+                                ),
+                              ),
+                              Icon(
+                                qualified
+                                    ? LucideIcons.checkCircle2
+                                    : LucideIcons.xCircle,
+                                size: 14,
+                                color: qualified ? Colors.green : Colors.red,
+                              ),
                             ],
                           ),
                           const Spacer(),
-                          Text(rc.cutoffScore.toInt().toString(), style: GoogleFonts.outfit(fontSize: 20, fontWeight: FontWeight.bold)),
+                          Text(
+                            rc.cutoffScore.toInt().toString(),
+                            style: GoogleFonts.outfit(
+                              fontSize: 20,
+                              fontWeight: FontWeight.bold,
+                            ),
+                          ),
                         ],
                       ),
                     );
@@ -268,10 +389,54 @@ class _DuProgramListScreenState extends State<DuProgramListScreen> {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        Text(label, style: GoogleFonts.outfit(fontSize: 11, color: Colors.grey)),
+        Text(
+          label,
+          style: GoogleFonts.outfit(fontSize: 11, color: Colors.grey),
+        ),
         const SizedBox(height: 2),
-        Text(value, style: GoogleFonts.outfit(fontSize: 16, fontWeight: FontWeight.bold, color: color)),
+        Text(
+          value,
+          style: GoogleFonts.outfit(
+            fontSize: 16,
+            fontWeight: FontWeight.bold,
+            color: color,
+          ),
+        ),
       ],
+    );
+  }
+
+  Widget _buildChanceBadge(String chance) {
+    Color color;
+    switch (chance) {
+      case 'Safe':
+        color = Colors.green;
+        break;
+      case 'Moderate':
+        color = Colors.orange;
+        break;
+      case 'Difficult':
+        color = Colors.red;
+        break;
+      default:
+        color = Colors.grey;
+    }
+
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+      decoration: BoxDecoration(
+        color: color.withOpacity(0.1),
+        borderRadius: BorderRadius.circular(6),
+        border: Border.all(color: color.withOpacity(0.2)),
+      ),
+      child: Text(
+        chance,
+        style: GoogleFonts.outfit(
+          fontSize: 10,
+          color: color,
+          fontWeight: FontWeight.bold,
+        ),
+      ),
     );
   }
 }

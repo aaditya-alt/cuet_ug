@@ -2,9 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:lucide_icons/lucide_icons.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
-import '../../models/du_models.dart';
 import '../../providers/du_predictor_service.dart';
-import '../premium/premium_screen.dart';
 import 'du_college_list_screen.dart';
 
 class DuInputScreen extends StatefulWidget {
@@ -19,188 +17,117 @@ class _DuInputScreenState extends State<DuInputScreen> {
   final SupabaseClient _client = Supabase.instance.client;
   final DuPredictorService _predictorService = DuPredictorService();
 
+  final TextEditingController _scoreController = TextEditingController();
+
   String _selectedCategory = 'UR';
   final List<String> _categories = ['UR', 'OBC', 'SC', 'ST', 'EWS', 'PwBD'];
 
   String _selectedGender = 'Female';
-  final List<String> _genders = ['Male', 'Female'];
+  final List<String> _genders = ['Male', 'Female', 'Other'];
 
-  int _selectedRound = 1;
-  int _selectedYear = 2025;
-  
-  List<int> _availableRounds = [1, 2, 3];
-  List<int> _availableYears = [2025];
+  String _selectedPreferredDegree = 'Any';
+  final List<String> _degrees = [
+    'Any',
+    'B.A.',
+    'B.Sc.',
+    'B.Com.',
+    'B.Tech.',
+    'BMS',
+    'BBA',
+    'B.Voc.',
+    'B.El.Ed.',
+    'BFA',
+    'Other'
+  ];
 
-  List<Map<String, dynamic>> _subjectList = [];
+  final int _selectedYear = 2025;
+
+  List<String> _allLanguages = [];
+  List<String> _allDomains = [];
   bool _isLoadingSubjects = true;
 
-  // Selected subjects by the user
-  final List<_SubjectEntry> _selectedSubjects = [];
-  bool _includeGT = false;
-  final TextEditingController _gtScoreController = TextEditingController();
-
-  // Placeholder for Premium state
-  bool _isPremium = false; // Set to true to test the predictor
+  // Selected subjects
+  final Set<String> _selectedLanguages = {};
+  final Set<String> _selectedDomains = {};
+  bool _studentHasGat = false;
   bool _isPredicting = false;
-
-  double get _totalScore {
-    List<double> scores = [];
-
-    // Collect subject scores
-    for (var entry in _selectedSubjects) {
-      if (entry.scoreController.text.isNotEmpty) {
-        scores.add(double.tryParse(entry.scoreController.text) ?? 0);
-      }
-    }
-
-    // Sort descending to pick best ones
-    scores.sort((a, b) => b.compareTo(a));
-
-    double gt = (_includeGT && _gtScoreController.text.isNotEmpty) 
-        ? (double.tryParse(_gtScoreController.text) ?? 0) 
-        : 0;
-    bool hasGT = _includeGT && _gtScoreController.text.isNotEmpty;
-
-    if (scores.length >= 4) {
-      // 4 or more subjects -> Take best 4 (ignore GT for the 1000 marks if subjects >= 4)
-      return scores.take(4).reduce((a, b) => a + b);
-    } else if (scores.length == 3 && hasGT) {
-      // 3 subjects + GT -> 4 items (1000 marks)
-      return scores.reduce((a, b) => a + b) + gt;
-    } else if (scores.length == 3 && !hasGT) {
-      // 3 subjects only -> Pro-rate 750 to 1000
-      double raw = scores.reduce((a, b) => a + b);
-      return (raw / 750) * 1000;
-    } else if (scores.length == 2 && hasGT) {
-      // 2 subjects + GT -> 3 items -> Pro-rate 750 to 1000
-      double raw = scores.reduce((a, b) => a + b) + gt;
-      return (raw / 750) * 1000;
-    } else {
-      // Fallback: just sum whatever we have
-      double currentSum = (scores.isEmpty ? 0 : scores.reduce((a, b) => a + b)) + gt;
-      return currentSum;
-    }
-  }
-
-  int get _itemsCount {
-    int count = 0;
-    for (var entry in _selectedSubjects) {
-      if (entry.scoreController.text.isNotEmpty && entry.selectedSubject != null) {
-        count++;
-      }
-    }
-    if (_includeGT && _gtScoreController.text.isNotEmpty) {
-      count++;
-    }
-    return count;
-  }
 
   @override
   void initState() {
     super.initState();
-    _fetchSubjectList();
-    _fetchAvailableRoundsAndYears();
-    // Add 2 subject rows by default
-    for (int i = 0; i < 2; i++) {
-      _addSubjectRow();
-    }
-    // Wait, I should add listeners to controllers to update UI on score change
-    _gtScoreController.addListener(() => setState(() {}));
+    _fetchSubjectLists();
   }
 
   @override
   void dispose() {
-    _gtScoreController.dispose();
-    for (var entry in _selectedSubjects) {
-      entry.scoreController.dispose();
-    }
+    _scoreController.dispose();
     super.dispose();
   }
 
-  Future<void> _fetchSubjectList() async {
+  Future<void> _fetchSubjectLists() async {
     try {
       final res = await _client.from('cuet_subject_lists').select();
+      final List<Map<String, dynamic>> list = List<Map<String, dynamic>>.from(res);
+      
+      final Set<String> langs = {};
+      final Set<String> domains = {};
+      
+      for (final row in list) {
+        final listName = row['list_name'] as String;
+        final subjectName = row['subject'] as String;
+        
+        if (listName.toUpperCase() == 'A') {
+          langs.add(subjectName);
+        } else {
+          domains.add(subjectName);
+        }
+      }
+
       setState(() {
-        _subjectList = List<Map<String, dynamic>>.from(res);
+        _allLanguages = langs.toList()..sort();
+        _allDomains = domains.toList()..sort();
         _isLoadingSubjects = false;
       });
     } catch (e) {
       setState(() => _isLoadingSubjects = false);
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-            const SnackBar(content: Text('Failed to load subjects')));
+          SnackBar(content: Text('Failed to load CUET subject lists: $e')),
+        );
       }
     }
-  }
-
-  Future<void> _fetchAvailableRoundsAndYears() async {
-    try {
-      // Typically we might query distinct rounds and years. 
-      // Mocking the result to [1, 2, 3] and [2025] for now as per requirements.
-      setState(() {
-        _availableRounds = [1, 2, 3];
-        _availableYears = [2025];
-      });
-    } catch (e) {
-      // fallback
-    }
-  }
-
-  void _addSubjectRow() {
-    final entry = _SubjectEntry();
-    entry.scoreController.addListener(() => setState(() {}));
-    setState(() {
-      _selectedSubjects.add(entry);
-    });
-  }
-
-  void _removeSubjectRow(int index) {
-    setState(() {
-      _selectedSubjects[index].scoreController.dispose();
-      _selectedSubjects.removeAt(index);
-    });
   }
 
   void _onPredictPressed() async {
     if (!_formKey.currentState!.validate()) return;
 
-    final userSubjects = <UserCuetSubject>[];
-
-    for (var entry in _selectedSubjects) {
-      if (entry.selectedSubject != null && entry.scoreController.text.isNotEmpty) {
-        final score = double.tryParse(entry.scoreController.text) ?? 0;
-        final subjInfo = _subjectList.firstWhere((s) => s['subject'] == entry.selectedSubject);
-        userSubjects.add(UserCuetSubject(
-          name: entry.selectedSubject!,
-          list: subjInfo['list_name'] as String,
-          score: score,
-        ));
-      }
-    }
-
-
-
-    if (_itemsCount < 3) {
+    if (_selectedLanguages.isEmpty || _selectedLanguages.length > 2) {
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(
-          content: Text('Please provide at least 3 items (Subjects + General Test).'),
+          content: Text('Please select 1 or 2 Language subjects from List A.'),
           backgroundColor: Colors.orange,
         ),
       );
       return;
     }
-    if (_includeGT && _gtScoreController.text.isNotEmpty) {
-      final score = double.tryParse(_gtScoreController.text) ?? 0;
-      userSubjects.add(UserCuetSubject(
-        name: 'General Test',
-        list: 'General Test',
-        score: score,
-      ));
+
+    if (_selectedDomains.isEmpty || _selectedDomains.length > 3) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Please select 1 to 3 Domain subjects from List B.'),
+          backgroundColor: Colors.orange,
+        ),
+      );
+      return;
     }
 
-    if (userSubjects.isEmpty) {
+    final double? score = double.tryParse(_scoreController.text);
+    if (score == null || score <= 0) {
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Please add at least one subject with a score.')),
+        const SnackBar(
+          content: Text('Please enter a valid composite CUET score.'),
+          backgroundColor: Colors.orange,
+        ),
       );
       return;
     }
@@ -209,40 +136,24 @@ class _DuInputScreenState extends State<DuInputScreen> {
 
     try {
       final results = await _predictorService.predict(
-        category: _selectedCategory,
-        round: _selectedRound,
+        studentLanguages: _selectedLanguages.toList(),
+        studentDomains: _selectedDomains.toList(),
+        studentHasGat: _studentHasGat,
+        studentScore: score,
+        studentCategory: _selectedCategory,
+        studentGender: _selectedGender,
+        preferredDegree: _selectedPreferredDegree,
         year: _selectedYear,
-        userSubjects: userSubjects,
-        gender: _selectedGender,
       );
 
       if (mounted) {
         setState(() => _isPredicting = false);
-
-        // Check if any programs were scaled (pro-rated)
-        bool hasScaled = false;
-        List<DuProgramResult> topScaled = [];
-        for (var college in results) {
-          for (var prog in college.programs) {
-            if (prog.isScaled) {
-              hasScaled = true;
-              if (topScaled.length < 3) topScaled.add(prog);
-            }
-          }
-        }
-
-        if (hasScaled) {
-          final shouldProceed = await _showProRateConfirmation(topScaled);
-          if (shouldProceed != true) return;
-        }
-
         Navigator.push(
           context,
           MaterialPageRoute(
             builder: (_) => DuCollegeListScreen(
               colleges: results,
               category: _selectedCategory,
-              round: _selectedRound,
               year: _selectedYear,
             ),
           ),
@@ -252,7 +163,10 @@ class _DuInputScreenState extends State<DuInputScreen> {
       if (mounted) {
         setState(() => _isPredicting = false);
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Prediction failed: $e')),
+          SnackBar(
+            content: Text('Prediction failed: $e'),
+            backgroundColor: Colors.red,
+          ),
         );
       }
     }
@@ -265,245 +179,262 @@ class _DuInputScreenState extends State<DuInputScreen> {
 
     return Scaffold(
       appBar: AppBar(
-        title: Text('DU CUET Predictor', style: GoogleFonts.outfit(fontWeight: FontWeight.bold)),
+        title: Text(
+          'DU College Predictor',
+          style: GoogleFonts.outfit(fontWeight: FontWeight.bold),
+        ),
+        elevation: 0,
       ),
       body: Stack(
         children: [
           SingleChildScrollView(
-            padding: const EdgeInsets.all(20),
+            padding: const EdgeInsets.fromLTRB(20, 20, 20, 100),
             child: Form(
               key: _formKey,
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  // ── Category & Gender ──
-                  Row(
-                    children: [
-                      Expanded(
-                        child: _buildDropdown<String>(
-                          label: 'Category',
-                          value: _selectedCategory,
-                          items: _categories,
-                          onChanged: (v) => setState(() => _selectedCategory = v!),
-                        ),
-                      ),
-                      const SizedBox(width: 16),
-                      Expanded(
-                        child: _buildDropdown<String>(
-                          label: 'Gender',
-                          value: _selectedGender,
-                          items: _genders,
-                          onChanged: (v) => setState(() => _selectedGender = v!),
-                        ),
-                      ),
-                    ],
-                  ),
-                  const SizedBox(height: 32),
-
-                  // ── Total Marks Indicator ──
+                  // ── Composite Score Card (Center Stage) ──
                   Container(
-                    padding: const EdgeInsets.all(20),
+                    width: double.infinity,
+                    padding: const EdgeInsets.all(24),
                     decoration: BoxDecoration(
-                      gradient: LinearGradient(
-                        colors: [
-                          theme.colorScheme.primary,
-                          theme.colorScheme.secondary,
-                        ],
-                      ),
+                      color: isDark ? Colors.grey.shade900 : Colors.grey.shade50,
                       borderRadius: BorderRadius.circular(24),
+                      border: Border.all(
+                        color: theme.colorScheme.primary.withOpacity(0.4),
+                        width: 1.5,
+                      ),
                       boxShadow: [
                         BoxShadow(
-                          color: theme.colorScheme.primary.withOpacity(0.3),
+                          color: theme.colorScheme.primary.withOpacity(isDark ? 0.05 : 0.08),
                           blurRadius: 15,
                           offset: const Offset(0, 8),
                         ),
                       ],
                     ),
-                    child: Row(
+                    child: Column(
                       children: [
+                        Text(
+                          'ENTER YOUR COMPOSITE CUET SCORE',
+                          style: GoogleFonts.outfit(
+                            color: theme.colorScheme.primary,
+                            fontSize: 12,
+                            fontWeight: FontWeight.bold,
+                            letterSpacing: 1.2,
+                          ),
+                        ),
+                        const SizedBox(height: 16),
                         Container(
-                          padding: const EdgeInsets.all(12),
+                          width: 220,
+                          padding: const EdgeInsets.symmetric(horizontal: 16),
                           decoration: BoxDecoration(
-                            color: Colors.white.withOpacity(0.2),
+                            color: isDark ? Colors.black.withOpacity(0.2) : Colors.grey.shade100,
                             borderRadius: BorderRadius.circular(16),
-                          ),
-                          child: const Icon(LucideIcons.trophy, color: Colors.white, size: 24),
-                        ),
-                        const SizedBox(width: 16),
-                        Expanded(
-                          child: Column(
-                            crossAxisAlignment: CrossAxisAlignment.start,
-                            children: [
-                              Text(
-                                'Cumulative Score',
-                                style: GoogleFonts.outfit(
-                                  color: Colors.white.withOpacity(0.9),
-                                  fontSize: 14,
-                                  fontWeight: FontWeight.w500,
-                                ),
-                              ),
-                              Text(
-                                '${_totalScore.toStringAsFixed(0)} / 1000',
-                                style: GoogleFonts.outfit(
-                                  color: Colors.white,
-                                  fontSize: 28,
-                                  fontWeight: FontWeight.bold,
-                                  letterSpacing: -1,
-                                ),
-                              ),
-                            ],
-                          ),
-                        ),
-                        Stack(
-                          alignment: Alignment.center,
-                          children: [
-                            SizedBox(
-                              width: 50,
-                              height: 50,
-                              child: CircularProgressIndicator(
-                                value: _totalScore / 1000,
-                                backgroundColor: Colors.white.withOpacity(0.1),
-                                color: Colors.white,
-                                strokeWidth: 6,
-                                strokeCap: StrokeCap.round,
-                              ),
+                            border: Border.all(
+                              color: isDark ? Colors.grey.shade800 : Colors.grey.shade300,
+                              width: 1.5,
                             ),
-                            Text(
-                              '${(_totalScore / 10).toStringAsFixed(0)}%',
-                              style: GoogleFonts.outfit(
-                                color: Colors.white,
-                                fontSize: 12,
-                                fontWeight: FontWeight.bold,
-                              ),
+                          ),
+                          child: TextFormField(
+                            controller: _scoreController,
+                            keyboardType: const TextInputType.numberWithOptions(decimal: true),
+                            textAlign: TextAlign.center,
+                            style: GoogleFonts.outfit(
+                              color: isDark ? Colors.white : Colors.black,
+                              fontSize: 32,
+                              fontWeight: FontWeight.bold,
                             ),
-                          ],
+                            decoration: InputDecoration(
+                              hintText: 'e.g. 741.73',
+                              hintStyle: GoogleFonts.outfit(
+                                color: isDark ? Colors.grey.shade600 : Colors.grey.shade400,
+                                fontSize: 28,
+                                fontWeight: FontWeight.normal,
+                              ),
+                              border: InputBorder.none,
+                              contentPadding: const EdgeInsets.symmetric(vertical: 8),
+                            ),
+                            validator: (v) {
+                              if (v == null || v.isEmpty) return 'Required';
+                              final val = double.tryParse(v);
+                              if (val == null || val <= 0) return 'Invalid Score';
+                              return null;
+                            },
+                          ),
+                        ),
+                        const SizedBox(height: 16),
+                        Text(
+                          'Ensure this is your consolidated DU admission score, not subject-wise.',
+                          style: GoogleFonts.outfit(
+                            color: isDark ? Colors.grey.shade400 : Colors.grey.shade600,
+                            fontSize: 11,
+                          ),
+                          textAlign: TextAlign.center,
                         ),
                       ],
+                    ),
+                  ),
+                  const SizedBox(height: 24),
+
+                  // ── Filters & Selectors Grid ──
+                  Row(
+                    children: [
+                      Expanded(
+                        child: _buildDropdownField<String>(
+                          label: 'Category',
+                          value: _selectedCategory,
+                          items: _categories,
+                          icon: LucideIcons.shield,
+                          onChanged: (v) => setState(() => _selectedCategory = v!),
+                        ),
+                      ),
+                      const SizedBox(width: 12),
+                      Expanded(
+                        child: _buildDropdownField<String>(
+                          label: 'Gender',
+                          value: _selectedGender,
+                          items: _genders,
+                          icon: LucideIcons.user,
+                          onChanged: (v) => setState(() => _selectedGender = v!),
+                        ),
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 16),
+
+                  _buildDropdownField<String>(
+                    label: 'Preferred Degree',
+                    value: _selectedPreferredDegree,
+                    items: _degrees,
+                    icon: LucideIcons.graduationCap,
+                    onChanged: (v) => setState(() => _selectedPreferredDegree = v!),
+                  ),
+                  const SizedBox(height: 24),
+
+                  // ── General Aptitude Test Toggle ──
+                  Container(
+                    padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+                    decoration: BoxDecoration(
+                      color: isDark ? Colors.grey.shade900 : Colors.grey.shade50,
+                      borderRadius: BorderRadius.circular(16),
+                      border: Border.all(color: isDark ? Colors.grey.shade800 : Colors.grey.shade200),
+                    ),
+                    child: SwitchListTile(
+                      title: Text(
+                        'General Aptitude Test (GAT)',
+                        style: GoogleFonts.outfit(fontWeight: FontWeight.bold, fontSize: 15),
+                      ),
+                      subtitle: Text(
+                        'Check this if you appeared for the GAT in CUET',
+                        style: GoogleFonts.outfit(fontSize: 12),
+                      ),
+                      secondary: Icon(
+                        LucideIcons.sparkles,
+                        color: _studentHasGat ? theme.colorScheme.primary : Colors.grey,
+                      ),
+                      value: _studentHasGat,
+                      activeColor: theme.colorScheme.primary,
+                      onChanged: (v) => setState(() => _studentHasGat = v),
+                      contentPadding: EdgeInsets.zero,
                     ),
                   ),
                   const SizedBox(height: 32),
 
-                  Text('CUET Subjects Appeared', style: GoogleFonts.outfit(fontSize: 18, fontWeight: FontWeight.bold)),
-                  const SizedBox(height: 16),
-
+                  // ── Subject Lists Loader ──
                   if (_isLoadingSubjects)
-                    const Center(child: CircularProgressIndicator())
-                  else
-                    ..._selectedSubjects.asMap().entries.map((e) {
-                      final idx = e.key;
-                      final entry = e.value;
-                      return Padding(
-                        padding: const EdgeInsets.only(bottom: 16),
-                        child: Row(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            Expanded(
-                              flex: 2,
-                              child: DropdownButtonFormField<String>(
-                                value: entry.selectedSubject,
-                                decoration: InputDecoration(
-                                  labelText: 'Select Subject',
-                                  labelStyle: GoogleFonts.outfit(fontSize: 14),
-                                ),
-                                isExpanded: true,
-                                items: _subjectList.map((s) {
-                                  return DropdownMenuItem<String>(
-                                    value: s['subject'] as String,
-                                    child: Text(
-                                      s['subject'] as String,
-                                      style: GoogleFonts.outfit(fontSize: 14),
-                                      overflow: TextOverflow.ellipsis,
-                                    ),
+                    const Center(
+                      child: Padding(
+                        padding: EdgeInsets.all(32),
+                        child: CircularProgressIndicator(),
+                      ),
+                    )
+                  else ...[
+                    // ── Languages Appeared (List A) ──
+                    Text(
+                      'Languages Appeared (List A) (${_selectedLanguages.length}/2)',
+                      style: GoogleFonts.outfit(fontSize: 16, fontWeight: FontWeight.bold),
+                    ),
+                    const SizedBox(height: 8),
+                    Text(
+                      'Select exactly 1 or 2 languages you studied in CUET',
+                      style: GoogleFonts.outfit(fontSize: 12, color: Colors.grey),
+                    ),
+                    const SizedBox(height: 12),
+                    Wrap(
+                      spacing: 8,
+                      runSpacing: 8,
+                      children: _allLanguages.map((subject) {
+                        final isSelected = _selectedLanguages.contains(subject);
+                        return ChoiceChip(
+                          avatar: isSelected ? const Icon(LucideIcons.check, size: 14, color: Colors.white) : null,
+                          label: Text(subject),
+                          selected: isSelected,
+                          onSelected: (selected) {
+                            setState(() {
+                              if (selected) {
+                                if (_selectedLanguages.length < 2) {
+                                  _selectedLanguages.add(subject);
+                                } else {
+                                  ScaffoldMessenger.of(context).showSnackBar(
+                                    const SnackBar(content: Text('You can select a maximum of 2 languages.')),
                                   );
-                                }).toList(),
-                                onChanged: (v) => setState(() => entry.selectedSubject = v),
-                                validator: (v) => v == null ? 'Required' : null,
-                              ),
-                            ),
-                            const SizedBox(width: 12),
-                            Expanded(
-                              flex: 1,
-                              child: TextFormField(
-                                controller: entry.scoreController,
-                                keyboardType: TextInputType.number,
-                                decoration: InputDecoration(
-                                  labelText: 'Score',
-                                  labelStyle: GoogleFonts.outfit(fontSize: 14),
-                                ),
-                                style: GoogleFonts.outfit(fontSize: 14),
-                                validator: (v) {
-                                  if (v == null || v.isEmpty) return 'Req';
-                                  final num = double.tryParse(v);
-                                  if (num == null || num < 0 || num > 250) return '0-250';
-                                  return null;
-                                },
-                              ),
-                            ),
-                            if (_selectedSubjects.length > 1)
-                              IconButton(
-                                icon: const Icon(LucideIcons.trash2, color: Colors.red, size: 20),
-                                onPressed: () => _removeSubjectRow(idx),
-                              ),
-                          ],
-                        ),
-                      );
-                    }).toList(),
-
-                  Align(
-                    alignment: Alignment.centerLeft,
-                    child: TextButton.icon(
-                      onPressed: _selectedSubjects.length < 5 ? _addSubjectRow : null,
-                      icon: const Icon(LucideIcons.plus),
-                      label: Text('Add Domain/Language (Max 5)', style: GoogleFonts.outfit()),
+                                }
+                              } else {
+                                _selectedLanguages.remove(subject);
+                              }
+                            });
+                          },
+                        );
+                      }).toList(),
                     ),
-                  ),
+                    const SizedBox(height: 32),
 
-                  const SizedBox(height: 24),
-                  Container(
-                    padding: const EdgeInsets.all(16),
-                    decoration: BoxDecoration(
-                      color: isDark ? theme.colorScheme.surface : Colors.grey.shade50,
-                      borderRadius: BorderRadius.circular(16),
-                      border: Border.all(color: Colors.grey.shade200),
+                    // ── Domains Appeared (List B) ──
+                    Text(
+                      'Domain Subjects Appeared (List B) (${_selectedDomains.length}/3)',
+                      style: GoogleFonts.outfit(fontSize: 16, fontWeight: FontWeight.bold),
                     ),
-                    child: Column(
-                      children: [
-                        CheckboxListTile(
-                          title: Text('General Test', style: GoogleFonts.outfit(fontWeight: FontWeight.bold)),
-                          subtitle: Text('Check if you appeared for GT', style: GoogleFonts.outfit(fontSize: 12)),
-                          value: _includeGT,
-                          onChanged: (v) => setState(() => _includeGT = v ?? false),
-                          contentPadding: EdgeInsets.zero,
-                          controlAffinity: ListTileControlAffinity.leading,
-                          activeColor: theme.colorScheme.primary,
-                        ),
-                        if (_includeGT)
-                          TextFormField(
-                            controller: _gtScoreController,
-                            keyboardType: TextInputType.number,
-                            decoration: const InputDecoration(labelText: 'General Test Score (out of 250)'),
-                            style: GoogleFonts.outfit(fontSize: 14),
-                            validator: (v) {
-                              if (!_includeGT) return null;
-                              if (v == null || v.isEmpty) return 'Required';
-                              final num = double.tryParse(v);
-                              if (num == null || num < 0 || num > 250) return '0-250';
-                              return null;
-                            },
-                          ),
-                      ],
+                    const SizedBox(height: 8),
+                    Text(
+                      'Select 1 to 3 domain subjects you appeared for in CUET',
+                      style: GoogleFonts.outfit(fontSize: 12, color: Colors.grey),
                     ),
-                  ),
-                  const SizedBox(height: 24),
-
-                  
-                  const SizedBox(height: 100), // spacing for bottom button
+                    const SizedBox(height: 12),
+                    Wrap(
+                      spacing: 8,
+                      runSpacing: 8,
+                      children: _allDomains.map((subject) {
+                        final isSelected = _selectedDomains.contains(subject);
+                        return ChoiceChip(
+                          avatar: isSelected ? const Icon(LucideIcons.check, size: 14, color: Colors.white) : null,
+                          label: Text(subject),
+                          selected: isSelected,
+                          onSelected: (selected) {
+                            setState(() {
+                              if (selected) {
+                                if (_selectedDomains.length < 3) {
+                                  _selectedDomains.add(subject);
+                                } else {
+                                  ScaffoldMessenger.of(context).showSnackBar(
+                                    const SnackBar(content: Text('You can select a maximum of 3 domain subjects.')),
+                                  );
+                                }
+                              } else {
+                                _selectedDomains.remove(subject);
+                              }
+                            });
+                          },
+                        );
+                      }).toList(),
+                    ),
+                  ],
                 ],
               ),
             ),
           ),
 
-          // Predict Button
+          // ── Predict Button Sticky Footer ──
           Align(
             alignment: Alignment.bottomCenter,
             child: Container(
@@ -511,19 +442,28 @@ class _DuInputScreenState extends State<DuInputScreen> {
               decoration: BoxDecoration(
                 color: theme.scaffoldBackgroundColor,
                 boxShadow: [
-                  BoxShadow(color: Colors.black.withOpacity(0.05), blurRadius: 10, offset: const Offset(0, -5)),
+                  BoxShadow(
+                    color: Colors.black.withOpacity(0.05),
+                    blurRadius: 10,
+                    offset: const Offset(0, -5),
+                  ),
                 ],
               ),
               child: ElevatedButton(
-                onPressed: _isLoadingSubjects || _isPredicting || _itemsCount < 3 ? null : _onPredictPressed,
+                onPressed: _isLoadingSubjects || _isPredicting ? null : _onPredictPressed,
                 style: ElevatedButton.styleFrom(
                   minimumSize: const Size(double.infinity, 56),
-                  backgroundColor: _itemsCount < 3 ? Colors.grey : theme.colorScheme.primary,
+                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+                  elevation: 4,
                 ),
                 child: _isPredicting
-                    ? const SizedBox(width: 24, height: 24, child: CircularProgressIndicator(color: Colors.white, strokeWidth: 2))
+                    ? const SizedBox(
+                        width: 24,
+                        height: 24,
+                        child: CircularProgressIndicator(color: Colors.white, strokeWidth: 2.5),
+                      )
                     : Text(
-                        _itemsCount < 3 ? 'Add at least 3 items' : 'Predict Colleges', 
+                        'Predict My Colleges',
                         style: GoogleFonts.outfit(fontSize: 16, fontWeight: FontWeight.bold),
                       ),
               ),
@@ -534,22 +474,26 @@ class _DuInputScreenState extends State<DuInputScreen> {
     );
   }
 
-  Widget _buildDropdown<T>({
+  Widget _buildDropdownField<T>({
     required String label,
     required T value,
     required List<T> items,
+    required IconData icon,
     required void Function(T?) onChanged,
   }) {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        Text(label, style: GoogleFonts.outfit(fontSize: 12, color: Colors.grey.shade600)),
+        Text(
+          label,
+          style: GoogleFonts.outfit(fontSize: 12, color: Colors.grey.shade600, fontWeight: FontWeight.w600),
+        ),
         const SizedBox(height: 6),
         Container(
           padding: const EdgeInsets.symmetric(horizontal: 12),
           decoration: BoxDecoration(
-            color: Theme.of(context).inputDecorationTheme.fillColor,
-            borderRadius: BorderRadius.circular(12),
+            color: Theme.of(context).inputDecorationTheme.fillColor ?? Colors.grey.shade50,
+            borderRadius: BorderRadius.circular(14),
             border: Border.all(color: Colors.grey.shade300),
           ),
           child: DropdownButtonHideUnderline(
@@ -557,7 +501,25 @@ class _DuInputScreenState extends State<DuInputScreen> {
               value: value,
               isExpanded: true,
               icon: const Icon(LucideIcons.chevronDown, size: 16),
-              items: items.map((e) => DropdownMenuItem(value: e, child: Text(e.toString(), style: GoogleFonts.outfit(fontSize: 14)))).toList(),
+              items: items.map((e) {
+                String displayStr = e.toString();
+                if (e is int && label.contains('Round')) {
+                  displayStr = 'Round $e (2025)';
+                }
+                return DropdownMenuItem(
+                  value: e,
+                  child: Row(
+                    children: [
+                      Icon(icon, size: 16, color: Colors.grey.shade600),
+                      const SizedBox(width: 8),
+                      Text(
+                        displayStr,
+                        style: GoogleFonts.outfit(fontSize: 14),
+                      ),
+                    ],
+                  ),
+                );
+              }).toList(),
               onChanged: onChanged,
             ),
           ),
@@ -565,88 +527,4 @@ class _DuInputScreenState extends State<DuInputScreen> {
       ],
     );
   }
-  Future<bool?> _showProRateConfirmation(List<DuProgramResult> scaledPrograms) {
-    return showDialog<bool>(
-      context: context,
-      barrierDismissible: false,
-      builder: (context) => AlertDialog(
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(24)),
-        title: Row(
-          children: [
-            const Icon(LucideIcons.scale, color: Colors.orange),
-            const SizedBox(width: 12),
-            Text('Pro-rated Score Alert', style: GoogleFonts.outfit(fontWeight: FontWeight.bold)),
-          ],
-        ),
-        content: Column(
-          mainAxisSize: MainAxisSize.min,
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Text(
-              'Some courses use a combination of only 3 subjects (out of 750). To maintain consistency, we have pro-rated these marks out of 1000.',
-              style: GoogleFonts.outfit(fontSize: 14, color: Colors.grey.shade700),
-            ),
-            const SizedBox(height: 20),
-            Text(
-              'Example Pro-rated Scores:',
-              style: GoogleFonts.outfit(fontSize: 12, fontWeight: FontWeight.bold, color: Colors.grey.shade500),
-            ),
-            const SizedBox(height: 12),
-            ...scaledPrograms.take(2).map((p) => Container(
-              margin: const EdgeInsets.only(bottom: 8),
-              padding: const EdgeInsets.all(12),
-              decoration: BoxDecoration(
-                color: Colors.orange.withOpacity(0.05),
-                borderRadius: BorderRadius.circular(12),
-                border: Border.all(color: Colors.orange.withOpacity(0.1)),
-              ),
-              child: Row(
-                children: [
-                  Expanded(
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Text(p.programName, style: GoogleFonts.outfit(fontSize: 12, fontWeight: FontWeight.w600), maxLines: 1, overflow: TextOverflow.ellipsis),
-                        Text('Original: ${p.originalScore?.toStringAsFixed(0)} / ${p.originalTotal}', style: GoogleFonts.outfit(fontSize: 10, color: Colors.grey)),
-                      ],
-                    ),
-                  ),
-                  const Icon(LucideIcons.arrowRight, size: 14, color: Colors.orange),
-                  const SizedBox(width: 8),
-                  Text(
-                    '${p.userScore.toStringAsFixed(0)}/1000',
-                    style: GoogleFonts.outfit(fontSize: 14, fontWeight: FontWeight.bold, color: Colors.orange),
-                  ),
-                ],
-              ),
-            )),
-            const SizedBox(height: 16),
-            Text(
-              'Are you ready to proceed with this calculation?',
-              style: GoogleFonts.outfit(fontSize: 14, fontWeight: FontWeight.w600),
-            ),
-          ],
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(context, false),
-            child: Text('Go Back', style: GoogleFonts.outfit(color: Colors.grey)),
-          ),
-          ElevatedButton(
-            onPressed: () => Navigator.pop(context, true),
-            style: ElevatedButton.styleFrom(
-              padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 12),
-              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-            ),
-            child: Text('Yes, Proceed', style: GoogleFonts.outfit(fontWeight: FontWeight.bold)),
-          ),
-        ],
-      ),
-    );
-  }
-}
-
-class _SubjectEntry {
-  String? selectedSubject;
-  final TextEditingController scoreController = TextEditingController();
 }

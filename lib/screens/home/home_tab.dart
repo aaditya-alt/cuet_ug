@@ -6,13 +6,15 @@ import '../../providers/user_score_provider.dart';
 import '../../providers/cutoff_provider.dart';
 import '../prediction/prediction_results_screen.dart';
 import '../prediction/du_input_screen.dart';
-import '../analytics/analytics_tab.dart';
+import '../cutoff/cutoff_explorer_screen.dart';
 import '../wishlist/wishlist_tab.dart';
 import '../timeline/csas_timeline_screen.dart';
 import '../notifications/notification_screen.dart';
 import '../counselling/counselling_guide_screen.dart';
 import '../../providers/navigation_provider.dart';
 import '../../providers/auth_service.dart';
+import 'package:supabase_flutter/supabase_flutter.dart';
+import 'package:url_launcher/url_launcher.dart';
 
 class HomeTab extends StatefulWidget {
   const HomeTab({super.key});
@@ -22,12 +24,37 @@ class HomeTab extends StatefulWidget {
 }
 
 class _HomeTabState extends State<HomeTab> {
-  final _langController    = TextEditingController();
-  final _domainController  = TextEditingController();
+  final _langController = TextEditingController();
+  final _domainController = TextEditingController();
   final _domain2Controller = TextEditingController();
   final _domain3Controller = TextEditingController();
 
   bool _showExtraScores = false;
+  List<Map<String, dynamic>> _banners = [];
+  bool _isLoadingBanners = true;
+
+  @override
+  void initState() {
+    super.initState();
+    _fetchBanners();
+  }
+
+  Future<void> _fetchBanners() async {
+    try {
+      final res = await Supabase.instance.client
+          .from('dashboard_banners')
+          .select()
+          .eq('is_active', true)
+          .order('created_at', ascending: false);
+      setState(() {
+        _banners = List<Map<String, dynamic>>.from(res);
+        _isLoadingBanners = false;
+      });
+    } catch (e) {
+      debugPrint('Error fetching banners: $e');
+      setState(() => _isLoadingBanners = false);
+    }
+  }
 
   @override
   void dispose() {
@@ -40,11 +67,11 @@ class _HomeTabState extends State<HomeTab> {
 
   @override
   Widget build(BuildContext context) {
-    final theme         = Theme.of(context);
+    final theme = Theme.of(context);
     final scoreProvider = Provider.of<UserScoreProvider>(context);
     final cutoffProvider = Provider.of<CutoffProvider>(context);
-    final authService   = Provider.of<AuthService>(context);
-    
+    final authService = Provider.of<AuthService>(context);
+
     final user = authService.currentUser;
     final userName = user?.userMetadata?['full_name'] ?? 'Student';
 
@@ -101,24 +128,143 @@ class _HomeTabState extends State<HomeTab> {
                     ),
                     child: IconButton(
                       icon: const Icon(LucideIcons.bell),
-                      onPressed: () => Navigator.push(context,
-                          MaterialPageRoute(
-                              builder: (_) => const NotificationScreen())),
+                      onPressed: () => Navigator.push(
+                        context,
+                        MaterialPageRoute(
+                          builder: (_) => const NotificationScreen(),
+                        ),
+                      ),
                       color: theme.colorScheme.primary,
                     ),
                   ),
                 ],
               ),
-              const SizedBox(height: 32),
+              const SizedBox(height: 24),
+
+              // ── Dynamic Banners ─────────────────────────────────────────
+              if (!_isLoadingBanners && _banners.isNotEmpty) ...[
+                SizedBox(
+                  height: 120,
+                  child: ListView.separated(
+                    scrollDirection: Axis.horizontal,
+                    itemCount: _banners.length,
+                    separatorBuilder: (_, __) => const SizedBox(width: 16),
+                    itemBuilder: (context, index) {
+                      final b = _banners[index];
+                      // Fallback hex parser
+                      Color bgColor = theme.colorScheme.primary;
+                      if (b['bg_color'] != null) {
+                        try {
+                          String hex = b['bg_color'].toString().replaceAll(
+                            '#',
+                            '',
+                          );
+                          if (hex.length == 6) hex = 'FF$hex';
+                          bgColor = Color(int.parse(hex, radix: 16));
+                        } catch (_) {}
+                      }
+
+                      return InkWell(
+                        onTap: () async {
+                          final url = b['action_url'] as String?;
+                          if (url != null && url.isNotEmpty) {
+                            try {
+                              final uri = Uri.parse(url);
+                              if (await canLaunchUrl(uri)) {
+                                await launchUrl(
+                                  uri,
+                                  mode: LaunchMode.externalApplication,
+                                );
+                              }
+                            } catch (_) {}
+                          }
+                        },
+                        borderRadius: BorderRadius.circular(20),
+                        child: Container(
+                          width: MediaQuery.of(context).size.width * 0.8,
+                          padding: const EdgeInsets.all(16),
+                          decoration: BoxDecoration(
+                            gradient: LinearGradient(
+                              colors: [bgColor.withOpacity(0.85), bgColor],
+                              begin: Alignment.topLeft,
+                              end: Alignment.bottomRight,
+                            ),
+                            borderRadius: BorderRadius.circular(20),
+                            boxShadow: [
+                              BoxShadow(
+                                color: bgColor.withOpacity(0.3),
+                                blurRadius: 10,
+                                offset: const Offset(0, 4),
+                              ),
+                            ],
+                          ),
+                          child: Row(
+                            children: [
+                              Expanded(
+                                child: Column(
+                                  crossAxisAlignment: CrossAxisAlignment.start,
+                                  mainAxisAlignment: MainAxisAlignment.center,
+                                  children: [
+                                    Text(
+                                      b['title'] ?? '',
+                                      style: GoogleFonts.outfit(
+                                        color: Colors.white,
+                                        fontSize: 18,
+                                        fontWeight: FontWeight.bold,
+                                      ),
+                                      maxLines: 2,
+                                      overflow: TextOverflow.ellipsis,
+                                    ),
+                                    if (b['subtitle'] != null &&
+                                        b['subtitle']
+                                            .toString()
+                                            .isNotEmpty) ...[
+                                      const SizedBox(height: 4),
+                                      Text(
+                                        b['subtitle'],
+                                        style: GoogleFonts.outfit(
+                                          color: Colors.white.withOpacity(0.8),
+                                          fontSize: 13,
+                                        ),
+                                        maxLines: 2,
+                                        overflow: TextOverflow.ellipsis,
+                                      ),
+                                    ],
+                                  ],
+                                ),
+                              ),
+                              if (b['icon'] != null) ...[
+                                const SizedBox(width: 12),
+                                Container(
+                                  padding: const EdgeInsets.all(12),
+                                  decoration: BoxDecoration(
+                                    color: Colors.white.withOpacity(0.2),
+                                    shape: BoxShape.circle,
+                                  ),
+                                  // For simplicity we fallback to star if mapping is needed.
+                                  child: const Icon(
+                                    LucideIcons.star,
+                                    color: Colors.white,
+                                    size: 24,
+                                  ),
+                                ),
+                              ],
+                            ],
+                          ),
+                        ),
+                      );
+                    },
+                  ),
+                ),
+                const SizedBox(height: 24),
+              ],
 
               // ── DU CUET Predictor Launch Card ──────────────────────────────
               InkWell(
                 onTap: () {
                   Navigator.push(
                     context,
-                    MaterialPageRoute(
-                      builder: (_) => const DuInputScreen(),
-                    ),
+                    MaterialPageRoute(builder: (_) => const DuInputScreen()),
                   );
                 },
                 borderRadius: BorderRadius.circular(24),
@@ -154,11 +300,17 @@ class _HomeTabState extends State<HomeTab> {
                               color: Colors.white.withOpacity(0.2),
                               borderRadius: BorderRadius.circular(14),
                             ),
-                            child: const Icon(LucideIcons.sparkles,
-                                color: Colors.white, size: 24),
+                            child: const Icon(
+                              LucideIcons.sparkles,
+                              color: Colors.white,
+                              size: 24,
+                            ),
                           ),
                           Container(
-                            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+                            padding: const EdgeInsets.symmetric(
+                              horizontal: 12,
+                              vertical: 6,
+                            ),
                             decoration: BoxDecoration(
                               color: Colors.white.withOpacity(0.2),
                               borderRadius: BorderRadius.circular(20),
@@ -212,7 +364,11 @@ class _HomeTabState extends State<HomeTab> {
                               ),
                             ),
                             const SizedBox(width: 8),
-                            Icon(LucideIcons.arrowRight, color: theme.colorScheme.primary, size: 20),
+                            Icon(
+                              LucideIcons.arrowRight,
+                              color: theme.colorScheme.primary,
+                              size: 20,
+                            ),
                           ],
                         ),
                       ),
@@ -225,9 +381,12 @@ class _HomeTabState extends State<HomeTab> {
 
               // ── Counselling Guide Banner ────────────────────────────────
               InkWell(
-                onTap: () => Navigator.push(context,
-                    MaterialPageRoute(
-                        builder: (_) => const CounsellingGuideScreen())),
+                onTap: () => Navigator.push(
+                  context,
+                  MaterialPageRoute(
+                    builder: (_) => const CounsellingGuideScreen(),
+                  ),
+                ),
                 borderRadius: BorderRadius.circular(20),
                 child: Container(
                   padding: const EdgeInsets.all(20),
@@ -235,7 +394,7 @@ class _HomeTabState extends State<HomeTab> {
                     gradient: LinearGradient(
                       colors: [
                         theme.colorScheme.primary.withOpacity(0.85),
-                        theme.colorScheme.primary
+                        theme.colorScheme.primary,
                       ],
                       begin: Alignment.topLeft,
                       end: Alignment.bottomRight,
@@ -257,23 +416,32 @@ class _HomeTabState extends State<HomeTab> {
                           color: Colors.white.withOpacity(0.2),
                           shape: BoxShape.circle,
                         ),
-                        child: const Icon(LucideIcons.graduationCap,
-                            color: Colors.white, size: 28),
+                        child: const Icon(
+                          LucideIcons.graduationCap,
+                          color: Colors.white,
+                          size: 28,
+                        ),
                       ),
                       const SizedBox(width: 16),
                       Expanded(
                         child: Column(
                           crossAxisAlignment: CrossAxisAlignment.start,
                           children: [
-                            Text('DU CSAS Guide 2025',
-                                style: GoogleFonts.outfit(
-                                    color: Colors.white,
-                                    fontSize: 17,
-                                    fontWeight: FontWeight.bold)),
-                            Text('Complete roadmap for admissions',
-                                style: GoogleFonts.outfit(
-                                    color: Colors.white.withOpacity(0.8),
-                                    fontSize: 13)),
+                            Text(
+                              'DU CSAS Guide 2026',
+                              style: GoogleFonts.outfit(
+                                color: Colors.white,
+                                fontSize: 17,
+                                fontWeight: FontWeight.bold,
+                              ),
+                            ),
+                            Text(
+                              'Complete roadmap for admissions',
+                              style: GoogleFonts.outfit(
+                                color: Colors.white.withOpacity(0.8),
+                                fontSize: 13,
+                              ),
+                            ),
                           ],
                         ),
                       ),
@@ -286,40 +454,71 @@ class _HomeTabState extends State<HomeTab> {
               const SizedBox(height: 32),
 
               // ── Quick Actions ───────────────────────────────────────────
-              Text('Quick Actions',
-                  style: GoogleFonts.outfit(
-                      fontSize: 20, fontWeight: FontWeight.bold)),
+              Text(
+                'Quick Actions',
+                style: GoogleFonts.outfit(
+                  fontSize: 20,
+                  fontWeight: FontWeight.bold,
+                ),
+              ),
               const SizedBox(height: 16),
               Row(
                 children: [
-                  _buildQuickAction(context, LucideIcons.building, 'Colleges',
-                      Colors.blue, onTap: () {
-                    Provider.of<NavigationProvider>(context, listen: false).setIndex(1);
-                  }),
+                  _buildQuickAction(
+                    context,
+                    LucideIcons.building,
+                    'Colleges',
+                    Colors.blue,
+                    onTap: () {
+                      Provider.of<NavigationProvider>(
+                        context,
+                        listen: false,
+                      ).setIndex(1);
+                    },
+                  ),
                   const SizedBox(width: 8),
-                  _buildQuickAction(context, LucideIcons.bookOpen, 'Cutoffs',
-                      Colors.green, onTap: () {
-                    Navigator.push(
+                  _buildQuickAction(
+                    context,
+                    LucideIcons.bookOpen,
+                    'Cutoffs',
+                    Colors.green,
+                    onTap: () {
+                      Navigator.push(
                         context,
                         MaterialPageRoute(
-                            builder: (_) => const AnalyticsTab()));
-                  }),
+                          builder: (_) => const CutoffExplorerScreen(),
+                        ),
+                      );
+                    },
+                  ),
                   const SizedBox(width: 8),
-                  _buildQuickAction(context, LucideIcons.calendar, 'Timeline',
-                      Colors.orange, onTap: () {
-                    Navigator.push(
+                  _buildQuickAction(
+                    context,
+                    LucideIcons.calendar,
+                    'Timeline',
+                    Colors.orange,
+                    onTap: () {
+                      Navigator.push(
                         context,
                         MaterialPageRoute(
-                            builder: (_) => const CsasTimelineScreen()));
-                  }),
+                          builder: (_) => const CsasTimelineScreen(),
+                        ),
+                      );
+                    },
+                  ),
                   const SizedBox(width: 8),
-                  _buildQuickAction(context, LucideIcons.heart, 'Wishlist',
-                      Colors.red, onTap: () {
-                    Navigator.push(
+                  _buildQuickAction(
+                    context,
+                    LucideIcons.heart,
+                    'Wishlist',
+                    Colors.red,
+                    onTap: () {
+                      Navigator.push(
                         context,
-                        MaterialPageRoute(
-                            builder: (_) => const WishlistTab()));
-                  }),
+                        MaterialPageRoute(builder: (_) => const WishlistTab()),
+                      );
+                    },
+                  ),
                 ],
               ),
               const SizedBox(height: 24),
@@ -389,12 +588,16 @@ class _HomeTabState extends State<HomeTab> {
           isExpanded: true,
           icon: const Icon(LucideIcons.chevronDown),
           items: subjects
-              .map((s) => DropdownMenuItem<String>(
-                    value: s,
-                    child: Text(s,
-                        style: GoogleFonts.outfit(fontSize: 14),
-                        overflow: TextOverflow.ellipsis),
-                  ))
+              .map(
+                (s) => DropdownMenuItem<String>(
+                  value: s,
+                  child: Text(
+                    s,
+                    style: GoogleFonts.outfit(fontSize: 14),
+                    overflow: TextOverflow.ellipsis,
+                  ),
+                ),
+              )
               .toList(),
           onChanged: (val) {
             if (val != null) onChanged(val);
@@ -437,10 +640,15 @@ class _HomeTabState extends State<HomeTab> {
               isExpanded: true,
               icon: const Icon(LucideIcons.chevronDown, size: 16),
               items: items
-                  .map((item) => DropdownMenuItem<String>(
-                        value: item,
-                        child: Text(item, style: GoogleFonts.outfit(fontSize: 13)),
-                      ))
+                  .map(
+                    (item) => DropdownMenuItem<String>(
+                      value: item,
+                      child: Text(
+                        item,
+                        style: GoogleFonts.outfit(fontSize: 13),
+                      ),
+                    ),
+                  )
                   .toList(),
               onChanged: onChanged,
             ),
@@ -471,7 +679,9 @@ class _HomeTabState extends State<HomeTab> {
                 Text(
                   'Your Composite Score',
                   style: GoogleFonts.outfit(
-                      fontSize: 11, color: Colors.grey.shade500),
+                    fontSize: 11,
+                    color: Colors.grey.shade500,
+                  ),
                   overflow: TextOverflow.ellipsis,
                 ),
                 Text(
@@ -491,9 +701,10 @@ class _HomeTabState extends State<HomeTab> {
             child: Text(
               sp.score.domainSubject,
               style: GoogleFonts.outfit(
-                  fontSize: 10,
-                  color: Colors.grey.shade500,
-                  fontWeight: FontWeight.w500),
+                fontSize: 10,
+                color: Colors.grey.shade500,
+                fontWeight: FontWeight.w500,
+              ),
               textAlign: TextAlign.right,
               overflow: TextOverflow.ellipsis,
               maxLines: 2,
@@ -505,8 +716,12 @@ class _HomeTabState extends State<HomeTab> {
   }
 
   Widget _buildQuickAction(
-      BuildContext context, IconData icon, String label, Color color,
-      {VoidCallback? onTap}) {
+    BuildContext context,
+    IconData icon,
+    String label,
+    Color color, {
+    VoidCallback? onTap,
+  }) {
     return Expanded(
       child: InkWell(
         onTap: onTap,
@@ -526,7 +741,9 @@ class _HomeTabState extends State<HomeTab> {
             Text(
               label,
               style: GoogleFonts.outfit(
-                  fontSize: 11, fontWeight: FontWeight.w500),
+                fontSize: 11,
+                fontWeight: FontWeight.w500,
+              ),
               overflow: TextOverflow.ellipsis,
               textAlign: TextAlign.center,
             ),
