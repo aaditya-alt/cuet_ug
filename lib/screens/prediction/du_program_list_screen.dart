@@ -251,16 +251,45 @@ class _DuProgramListScreenState extends State<DuProgramListScreen> {
                   children: [
                     _buildScoreCol(
                       'Your Score',
-                      program.userScore.toInt().toString(),
+                      '${program.userScore.toInt()}',
                       theme.colorScheme.primary,
                     ),
                     _buildScoreCol(
                       'Cutoff',
-                      program.cutoffScore.toInt().toString(),
+                      '${program.cutoffScore.toInt()}',
                       Colors.grey.shade600,
                     ),
                     _buildScoreCol('Gap', diffText, diffColor),
                   ],
+                ),
+                const SizedBox(height: 12),
+                Container(
+                  padding: const EdgeInsets.all(8),
+                  decoration: BoxDecoration(
+                    color: Colors.blue.withOpacity(0.05),
+                    borderRadius: BorderRadius.circular(8),
+                    border: Border.all(color: Colors.blue.withOpacity(0.1)),
+                  ),
+                  child: Row(
+                    children: [
+                      Icon(
+                        LucideIcons.info,
+                        color: Colors.blue.shade700,
+                        size: 14,
+                      ),
+                      const SizedBox(width: 8),
+                      Expanded(
+                        child: Text(
+                          program.meritScheme,
+                          style: GoogleFonts.outfit(
+                            fontSize: 11,
+                            color: Colors.blue.shade900,
+                            fontWeight: FontWeight.w500,
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
                 ),
                 if (program.note != null) ...[
                   const SizedBox(height: 12),

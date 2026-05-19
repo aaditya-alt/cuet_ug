@@ -41,15 +41,19 @@ class _DuCollegeListScreenState extends State<DuCollegeListScreen> {
   String? _selectedCourse;
   List<DuCollegeData> _filteredColleges = [];
 
-  double _getUserBestScore() {
-    if (widget.colleges.isEmpty) return 0.0;
-    double maxScore = 0.0;
+  String _getUserBestScoreDisplay() {
+    if (widget.colleges.isEmpty) return '0 / 1000';
+    double bestScore = 0.0;
+    int maxScoreForBest = 1000;
     for (var c in widget.colleges) {
       for (var p in c.programs) {
-        if (p.userScore > maxScore) maxScore = p.userScore;
+        if (p.userScore > bestScore) {
+          bestScore = p.userScore;
+          maxScoreForBest = p.maxScore;
+        }
       }
     }
-    return maxScore;
+    return '${bestScore.toInt()} / $maxScoreForBest';
   }
 
   List<String> _getAllPrograms() {
@@ -147,8 +151,8 @@ class _DuCollegeListScreenState extends State<DuCollegeListScreen> {
                 Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    Text('Your Consolidated Score', style: GoogleFonts.outfit(color: Colors.white.withOpacity(0.8), fontSize: 12)),
-                    Text('${_getUserBestScore().toInt()} / 1000', style: GoogleFonts.outfit(color: Colors.white, fontSize: 24, fontWeight: FontWeight.bold)),
+                    Text('Your Best Merit Score', style: GoogleFonts.outfit(color: Colors.white.withOpacity(0.8), fontSize: 12)),
+                    Text(_getUserBestScoreDisplay(), style: GoogleFonts.outfit(color: Colors.white, fontSize: 24, fontWeight: FontWeight.bold)),
                   ],
                 ),
                 const Spacer(),

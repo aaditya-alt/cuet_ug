@@ -1,6 +1,20 @@
 import 'package:supabase_flutter/supabase_flutter.dart';
 import '../models/du_models.dart';
 
+// ─────────────────────────────────────────────────────────────────────────────
+// Internal helper to carry merit calculation result
+// ─────────────────────────────────────────────────────────────────────────────
+class _ProgramMerit {
+  final double score;
+  final int maxScore;
+  final String scheme;
+  const _ProgramMerit({
+    required this.score,
+    required this.maxScore,
+    required this.scheme,
+  });
+}
+
 class DuPredictorService {
   final SupabaseClient _client = Supabase.instance.client;
 
@@ -31,6 +45,91 @@ class DuPredictorService {
     'Maharshi Valmiki College of Education',
   };
 
+  // ─────────────────────────────────────────────────────────────────────────
+  // 750-MARK PROGRAM DETECTION
+  // B.Sc. science programmes where language is compulsory to appear in CUET
+  // but is NOT counted in the merit. Only 3 domain subjects count (max 750).
+  // ─────────────────────────────────────────────────────────────────────────
+  static const Set<String> _domainOnlyKeywords = {
+    'chemistry',
+    'physics',
+    'mathematics',
+    'botany',
+    'zoology',
+    'biological sciences',
+    'biological science',
+    'biochemistry',
+    'biotechnology',
+    'microbiology',
+    'food technology',
+    'geology',
+    'computer science',
+    'electronics',
+    'statistics',
+    'instrumentation',
+    'polymer science',
+    'environmental science',
+    'anthropology',
+    'operational research',
+    'home science',
+    'physical education',
+    'health education',
+    'applied physical',
+    'applied life',
+    'life sciences',
+  };
+
+  bool _isDomainOnlyProgram(String programName) {
+    final n = programName.toLowerCase()
+        .replaceAll('.', '')
+        .replaceAll('(', ' ')
+        .replaceAll(')', ' ')
+        .replaceAll(RegExp(r'\s+'), ' ')
+        .trim();
+
+    // Must be a B.Sc. programme (hons or otherwise)
+    final isBsc = n.contains('bsc') || n.startsWith('b sc');
+    if (!isBsc) return false;
+
+    return _domainOnlyKeywords.any((kw) => n.contains(kw));
+  }
+
+  // ─────────────────────────────────────────────────────────────────────────
+  // MERIT SCORE CALCULATOR
+  // Returns the score + scheme appropriate for this specific programme.
+  // ─────────────────────────────────────────────────────────────────────────
+  _ProgramMerit _computeProgramMerit({
+    required String programName,
+    required Map<String, double> langScores,
+    required Map<String, double> domainScores,
+  }) {
+    if (_isDomainOnlyProgram(programName)) {
+      // Domain scores only — language NOT counted
+      final sorted = domainScores.values.toList()
+        ..sort((a, b) => b.compareTo(a));
+      final score = sorted.take(3).fold(0.0, (s, v) => s + v);
+      return _ProgramMerit(
+        score: score,
+        maxScore: 750,
+        scheme: '3 Domain Subjects Only (out of 750)\nLanguage is compulsory in CUET but NOT counted in merit',
+      );
+    } else {
+      // Standard: best language (250) + best 3 domains (750) = 1000
+      final bestLang = langScores.values.isEmpty
+          ? 0.0
+          : langScores.values.reduce((a, b) => a > b ? a : b);
+      final sortedDomains = domainScores.values.toList()
+        ..sort((a, b) => b.compareTo(a));
+      final topDomains =
+          sortedDomains.take(3).fold(0.0, (s, v) => s + v);
+      return _ProgramMerit(
+        score: bestLang + topDomains,
+        maxScore: 1000,
+        scheme: '1 Language (${bestLang.toInt()}) + 3 Domain Subjects out of 1000',
+      );
+    }
+  }
+
   Future<void> _fetchCachesIfNeeded() async {
     if (_cachedEligibility == null) {
       final res = await _client.from('du_program_eligibility').select();
@@ -44,21 +143,6 @@ class DuPredictorService {
 
   // ─────────────────────────────────────────────────────────────────────────
   // SUBJECT NORMALISER
-  // Used for ALL subject comparisons (eligibility specific[], student input,
-  // BA programme map). One function everywhere = no mismatch possible.
-  //
-  // Rules:
-  //   • lowercase
-  //   • normalise spaces around "/" → single space each side
-  //   • collapse all other whitespace
-  //   • trim
-  //
-  // Examples:
-  //   "Mathematics / Applied Mathematics" → "mathematics / applied mathematics"
-  //   "mathematics/applied mathematics"   → "mathematics / applied mathematics"
-  //   "Physics"                           → "physics"
-  //   "Biology / Biological Studies / Biotechnology / Biochemistry"
-  //     → "biology / biological studies / biotechnology / biochemistry"
   // ─────────────────────────────────────────────────────────────────────────
   String _normSub(String s) {
     return s
@@ -70,13 +154,11 @@ class DuPredictorService {
 
   // ─────────────────────────────────────────────────────────────────────────
   // PROGRAMME NAME NORMALISER
-  // Used only for cutoff ↔ eligibility table name matching.
-  // Strips dots, brackets, separators so "B.Sc. (Hons.)" == "B.Sc (Hons)"
   // ─────────────────────────────────────────────────────────────────────────
   String _normProg(String name) {
     return name
         .toLowerCase()
-        .replaceAll('health care', 'healthcare') // ADD THIS LINE
+        .replaceAll('health care', 'healthcare')
         .replaceAll('.', '')
         .replaceAll('(', ' ')
         .replaceAll(')', ' ')
@@ -97,7 +179,7 @@ class DuPredictorService {
     final studentLangsNorm = studentLangs.map(_normSub).toList();
     final studentDomainsNorm = studentDomains.map(_normSub).toList();
 
-    // ── Language check ──────────────────────────────────────────
+    // Language check
     bool langOk = false;
     final langCombo = combo['languages'] as Map<String, dynamic>?;
     if (langCombo != null) {
@@ -105,9 +187,8 @@ class DuPredictorService {
       final specific = langCombo['specific'] as List<dynamic>?;
       if (specific != null && specific.isNotEmpty) {
         final specNorm = specific.map((s) => _normSub(s.toString())).toSet();
-        final matched = studentLangsNorm
-            .where((l) => specNorm.contains(l))
-            .length;
+        final matched =
+            studentLangsNorm.where((l) => specNorm.contains(l)).length;
         langOk = matched >= 1 && studentLangsNorm.length >= count;
       } else {
         langOk = studentLangsNorm.length >= count;
@@ -116,7 +197,7 @@ class DuPredictorService {
       langOk = true;
     }
 
-    // ── Domain check ────────────────────────────────────────────
+    // Domain check
     bool domainOk = false;
     final domainCombo = combo['domains'] as Map<String, dynamic>?;
     if (domainCombo != null) {
@@ -127,22 +208,19 @@ class DuPredictorService {
       if (specific == null || specific.isEmpty) {
         domainOk = studentDomainsNorm.length >= count;
       } else {
-        final specNorm = specific.map((s) => _normSub(s.toString())).toList();
-
+        final specNorm =
+            specific.map((s) => _normSub(s.toString())).toList();
         if (logic == 'any') {
           domainOk = studentDomainsNorm.length >= count;
         } else if (logic == 'all') {
           domainOk = specNorm.every((sp) => studentDomainsNorm.contains(sp));
         } else if (logic == 'must_include') {
-          final hasAll = specNorm.every(
-            (sp) => studentDomainsNorm.contains(sp),
-          );
+          final hasAll =
+              specNorm.every((sp) => studentDomainsNorm.contains(sp));
           domainOk = hasAll && studentDomainsNorm.length >= count;
-          print(
-            'must_include | specNorm=$specNorm | hasAll=$hasAll | studentLen=${studentDomainsNorm.length} | count=$count | domainOk=$domainOk',
-          );
         } else if (logic == 'at_least_one') {
-          final hasOne = specNorm.any((sp) => studentDomainsNorm.contains(sp));
+          final hasOne =
+              specNorm.any((sp) => studentDomainsNorm.contains(sp));
           domainOk = hasOne && studentDomainsNorm.length >= count;
         } else {
           domainOk = studentDomainsNorm.length >= count;
@@ -152,7 +230,7 @@ class DuPredictorService {
       domainOk = true;
     }
 
-    // ── GAT check ───────────────────────────────────────────────
+    // GAT check
     final needsGat = combo['general_test'] as bool? ?? false;
     final gatOk = needsGat ? studentHasGat : true;
 
@@ -161,8 +239,6 @@ class DuPredictorService {
 
   // ─────────────────────────────────────────────────────────────────────────
   // B.A. PROGRAMME ROW DETECTION
-  // Matches "B.A Program (...)" or "B.A. Programme (...)"
-  // but NOT "B.A. (Programme)" or "B.A. (Hons.) ..."
   // ─────────────────────────────────────────────────────────────────────────
   bool _isBaProgrammeRow(String pName) {
     return RegExp(
@@ -171,100 +247,58 @@ class DuPredictorService {
     ).hasMatch(pName.trim());
   }
 
-  // ─────────────────────────────────────────────────────────────────────────
-  // B.A. PROGRAMME COMBINATION CHECK
-  // Parses "B.A Program (Discipline1 + Discipline2)" and checks both
-  // disciplines against the student's CUET domains via ba_programme_subject_map
-  // ─────────────────────────────────────────────────────────────────────────
   bool _studentQualifiesForBaProgramme(
     String programName,
     List<String> studentDomains,
   ) {
     final match = RegExp(r'\(([^)]+)\)').firstMatch(programName);
-    if (match == null) return true; // no brackets → generic row → pass
-
+    if (match == null) return true;
     final parts = match.group(1)!.split('+').map((s) => s.trim()).toList();
     if (parts.length < 2) return true;
-
     return _isDisciplineSatisfied(parts[0], studentDomains) &&
         _isDisciplineSatisfied(parts[1], studentDomains);
   }
 
-  bool _isDisciplineSatisfied(String discipline, List<String> studentDomains) {
+  bool _isDisciplineSatisfied(
+      String discipline, List<String> studentDomains) {
     if (_cachedBaSubjectMap == null) return true;
-
-    // Find discipline in map using _normSub for consistent comparison
     final mapRow = _cachedBaSubjectMap!.firstWhere(
       (m) => _normSub(m['discipline'].toString()) == _normSub(discipline),
       orElse: () => <String, dynamic>{},
     );
-
-    if (mapRow.isEmpty) return true; // not in map → college-internal → pass
-
+    if (mapRow.isEmpty) return true;
     final cuetSubject = mapRow['cuet_subject'];
-    if (cuetSubject == null || cuetSubject.toString().isEmpty) {
-      return true; // null CUET subject → college-internal → pass
-    }
-
-    // Compare using _normSub on both sides
+    if (cuetSubject == null || cuetSubject.toString().isEmpty) return true;
     final cuetNorm = _normSub(cuetSubject.toString());
     return studentDomains.any((d) => _normSub(d) == cuetNorm);
   }
 
   // ─────────────────────────────────────────────────────────────────────────
   // FALLBACK MATCHER
-  // Only called when _normProg() exact lookup fails.
-  // Handles specific known edge-cases without fuzzy matching.
   // ─────────────────────────────────────────────────────────────────────────
   String? _fallbackMatch(String cutoffName, List<String> eligibleNames) {
     final lower = cutoffName.toLowerCase();
-
     for (final elig in eligibleNames) {
       final eligLower = elig.toLowerCase();
-
-      // Re-try normalised match (redundant but safe)
       if (_normProg(elig) == _normProg(cutoffName)) return elig;
-
-      // BBA-FIA
       if (lower.contains('financial investment') &&
-          eligLower.contains('financial investment'))
-        return elig;
-
-      // BMS
+          eligLower.contains('financial investment')) return elig;
       if (lower.contains('bachelor of management studies') &&
-          eligLower.contains('bachelor of management studies'))
-        return elig;
-
-      // B.El.Ed.
+          eligLower.contains('bachelor of management studies')) return elig;
       if (lower.contains('elementary education') &&
-          eligLower.contains('elementary education'))
-        return elig;
-
-      // BFA
+          eligLower.contains('elementary education')) return elig;
       if (lower.contains('bachelor of fine arts') &&
-          eligLower.contains('bachelor of fine arts'))
-        return elig;
-
-      // Five Year Journalism
+          eligLower.contains('bachelor of fine arts')) return elig;
       if (lower.contains('five year') &&
           lower.contains('journalism') &&
-          eligLower.contains('journalism'))
-        return elig;
-
-      // B.Tech IT & MI
+          eligLower.contains('journalism')) return elig;
       if (lower.contains('information technology') &&
           lower.contains('mathematical') &&
-          eligLower.contains('information technology'))
-        return elig;
-
-      // B.Sc. Physical Education, Health Education and Sports
+          eligLower.contains('information technology')) return elig;
       if (lower.contains('physical education') &&
           lower.contains('health education') &&
           eligLower.contains('physical education') &&
-          eligLower.contains('health education'))
-        return elig;
-
-      // B.Sc. Applied Physical Sciences (disambiguate by secondary keyword)
+          eligLower.contains('health education')) return elig;
       if (lower.contains('applied physical sciences') &&
           eligLower.contains('applied physical sciences')) {
         if (lower.contains('industrial') && eligLower.contains('industrial'))
@@ -275,18 +309,16 @@ class DuPredictorService {
           return elig;
       }
     }
-
     return null;
   }
 
   // ─────────────────────────────────────────────────────────────────────────
-  // MAIN PREDICT
+  // MAIN PREDICT  ─  now accepts per-subject scores
   // ─────────────────────────────────────────────────────────────────────────
   Future<List<DuCollegeDetails>> predict({
-    required List<String> studentLanguages,
-    required List<String> studentDomains,
+    required Map<String, double> langScores,   // subject → score (0-250)
+    required Map<String, double> domainScores, // subject → score (0-250)
     required bool studentHasGat,
-    required double studentScore,
     required String studentCategory,
     required String studentGender,
     String preferredDegree = 'Any',
@@ -294,30 +326,26 @@ class DuPredictorService {
     bool showOutOfRange = false,
   }) async {
     try {
-      if (studentScore <= 0) {
-        throw ArgumentError('Student score must be greater than zero.');
-      }
-      if (studentLanguages.isEmpty) {
-        throw ArgumentError('Please select at least one language from List A.');
-      }
-      if (studentDomains.isEmpty) {
+      if (langScores.isEmpty) {
         throw ArgumentError(
-          'Please select at least one domain subject from List B.',
-        );
+            'Please select at least one language (List A) subject.');
+      }
+      if (domainScores.isEmpty) {
+        throw ArgumentError(
+            'Please select at least one domain (List B) subject.');
       }
 
-      // With this — fetch directly, no caching at all:
+      final studentLanguages = langScores.keys.toList();
+      final studentDomains = domainScores.keys.toList();
+
+      // Always fetch fresh
       final eligRes = await _client.from('du_program_eligibility').select();
       _cachedEligibility = List<Map<String, dynamic>>.from(eligRes);
-
       final baRes = await _client.from('ba_programme_subject_map').select();
       _cachedBaSubjectMap = List<Map<String, dynamic>>.from(baRes);
-
-      // Also print what the eligibility table has for Chemistry
-
       await _fetchCachesIfNeeded();
 
-      // ── Step 1: Which programmes is this student eligible for? ────────────
+      // ── Step 1: Eligible programmes ─────────────────────────────────────
       final eligiblePrograms = <String, Map<String, dynamic>>{};
       final programDegrees = <String, String>{};
       final programNotes = <String, String>{};
@@ -341,7 +369,8 @@ class DuPredictorService {
             studentHasGat,
           )) {
             eligible = true;
-            if ((combo['priority'] as int? ?? 1) != 2) hasOnlyPriority2 = false;
+            if ((combo['priority'] as int? ?? 1) != 2)
+              hasOnlyPriority2 = false;
             matchedNote ??= combo['note'] as String?;
           }
         }
@@ -352,34 +381,22 @@ class DuPredictorService {
           programNotes[pName] = hasOnlyPriority2
               ? 'Preference given to specific language students; you may be considered only if seats remain.'
               : (matchedNote ?? '');
-
           if (pName.trim() == 'B.A. (Programme)') {
             isBaProgrammeEligible = true;
           }
         }
       }
 
-      print('📋 Eligible programs: ${eligiblePrograms.length}');
-
-      // ── Step 2: Build normalised name → original name lookup ─────────────
+      // ── Step 2: Normalised lookup map ────────────────────────────────────
       final normToEligible = <String, String>{};
       for (final pName in eligiblePrograms.keys) {
         normToEligible[_normProg(pName)] = pName;
       }
 
-      // ── Step 3: Fetch cutoff rows ─────────────────────────────────────────
-      final cutoffsRes = await _client
-          .from('du_cutoffs')
-          .select()
-          .eq('year', year)
-          .eq('category', studentCategory)
-          .limit(3000);
-
-      // Replace the single cutoffs fetch with this:
+      // ── Step 3: Fetch cutoffs (paginated) ────────────────────────────────
       final List<Map<String, dynamic>> cutoffs = [];
       int offset = 0;
       const batchSize = 1000;
-
       while (true) {
         final batch = await _client
             .from('du_cutoffs')
@@ -387,15 +404,13 @@ class DuPredictorService {
             .eq('year', year)
             .eq('category', studentCategory)
             .range(offset, offset + batchSize - 1);
-
         final batchList = List<Map<String, dynamic>>.from(batch);
         cutoffs.addAll(batchList);
-
-        if (batchList.length < batchSize) break; // last batch
+        if (batchList.length < batchSize) break;
         offset += batchSize;
       }
 
-      // ── Step 4: College details lookup ───────────────────────────────────
+      // ── Step 4: College details ───────────────────────────────────────────
       final collegeRes = await _client.from('du_college_details').select();
       final collegeDetailsMap = <String, Map<String, dynamic>>{};
       for (final c in List<Map<String, dynamic>>.from(collegeRes)) {
@@ -403,10 +418,9 @@ class DuPredictorService {
             c;
       }
 
-      // ── Step 5: Match every cutoff row ────────────────────────────────────
+      // ── Step 5: Match cutoff rows → eligible entries ──────────────────────
       final eligibleEntries = <String, _EligibleEntry>{};
       final isMale = studentGender.trim().toLowerCase() == 'male';
-      int skippedGender = 0, skippedNoMatch = 0, matchedCount = 0;
 
       for (final row in cutoffs) {
         final pName = (row['program_name'] as String).trim();
@@ -415,18 +429,13 @@ class DuPredictorService {
         final rowGender = (row['gender'] as String? ?? 'Co-Ed').trim();
         final rowRound = row['round'] as int? ?? 1;
 
-        // Gender filter — DB stores 'Female' for women's colleges
-        if (isMale && rowGender == 'Female') {
-          skippedGender++;
-          continue;
-        }
+        if (isMale && rowGender == 'Female') continue;
 
         bool isRowEligible = false;
         String matchedProgramKey = '';
         String degree = 'B.A.';
 
         if (_isBaProgrammeRow(pName)) {
-          // B.A Program (Disc1 + Disc2) rows
           if (isBaProgrammeEligible &&
               _studentQualifiesForBaProgramme(pName, studentDomains)) {
             isRowEligible = true;
@@ -434,36 +443,23 @@ class DuPredictorService {
             degree = 'B.A.';
           }
         } else {
-          // Lookup 1: exact normalised match
           final normCutoff = _normProg(pName);
           final exactMatch = normToEligible[normCutoff];
-
           if (exactMatch != null) {
             isRowEligible = true;
             matchedProgramKey = exactMatch;
             degree = programDegrees[exactMatch] ?? '';
           } else {
-            // Lookup 2: targeted fallback for known edge-cases
-            final fallback = _fallbackMatch(
-              pName,
-              eligiblePrograms.keys.toList(),
-            );
+            final fallback = _fallbackMatch(pName, eligiblePrograms.keys.toList());
             if (fallback != null) {
               isRowEligible = true;
               matchedProgramKey = fallback;
               degree = programDegrees[fallback] ?? '';
-            } else {
-              // print('❌ NO MATCH: "$pName"  norm:"$normCutoff"');
             }
           }
         }
 
-        if (!isRowEligible) {
-          skippedNoMatch++;
-          continue;
-        }
-
-        matchedCount++;
+        if (!isRowEligible) continue;
 
         // Degree filter
         if (preferredDegree != 'Any' &&
@@ -486,24 +482,28 @@ class DuPredictorService {
         );
       }
 
-      // print(
-      //   '📈 matched=$matchedCount skippedGender=$skippedGender skippedNoMatch=$skippedNoMatch',
-      // );
-
-      // ── Step 6: Score each entry ──────────────────────────────────────────
+      // ── Step 6: Score each entry using program-specific merit ─────────────
       final groupedByCollege = <String, List<DuProgramResult>>{};
 
       for (final entry in eligibleEntries.values) {
         entry.roundRows.sort((a, b) => a.cutoffScore.compareTo(b.cutoffScore));
         final bestCutoff = entry.roundRows.first.cutoffScore;
-        final diff = studentScore - bestCutoff;
+
+        // Calculate the correct merit score for THIS programme
+        final merit = _computeProgramMerit(
+          programName: entry.programName,
+          langScores: langScores,
+          domainScores: domainScores,
+        );
+
+        final diff = merit.score - bestCutoff;
 
         String chance;
-        if (studentScore >= bestCutoff) {
+        if (merit.score >= bestCutoff) {
           chance = 'Safe';
-        } else if (studentScore >= bestCutoff * 0.97) {
+        } else if (merit.score >= bestCutoff * 0.97) {
           chance = 'Moderate';
-        } else if (studentScore >= bestCutoff * 0.93) {
+        } else if (merit.score >= bestCutoff * 0.93) {
           chance = 'Difficult';
         } else {
           chance = 'Out of Range';
@@ -516,25 +516,24 @@ class DuPredictorService {
 
         groupedByCollege
             .putIfAbsent(entry.collegeName, () => [])
-            .add(
-              DuProgramResult(
-                programName: entry.programName,
-                degree: entry.degree,
-                userScore: studentScore,
-                cutoffScore: bestCutoff,
-                difference: double.parse(diff.toStringAsFixed(2)),
-                roundCutoffs: sortedRounds,
-                chance: chance,
-                note: programNotes[entry.matchedProgramKey],
-              ),
-            );
+            .add(DuProgramResult(
+              programName: entry.programName,
+              degree: entry.degree,
+              userScore: merit.score,
+              cutoffScore: bestCutoff,
+              difference: double.parse(diff.toStringAsFixed(2)),
+              roundCutoffs: sortedRounds,
+              chance: chance,
+              note: programNotes[entry.matchedProgramKey],
+              maxScore: merit.maxScore,
+              meritScheme: merit.scheme,
+            ));
       }
 
       // ── Step 7: Assemble final list ───────────────────────────────────────
       final resultList = <DuCollegeDetails>[];
 
       groupedByCollege.forEach((cName, progs) {
-        // Double-guard: skip women's colleges for male students
         if (isMale && _womensColleges.contains(cName)) return;
 
         progs.sort((a, b) {
@@ -566,7 +565,7 @@ class DuPredictorService {
     }
   }
 
-  // ── Utility methods ───────────────────────────────────────────────────────
+  // ── Utility ───────────────────────────────────────────────────────────────
   Future<List<DuCollegeCourse>> getCollegeCourses(String collegeName) async {
     final res = await _client
         .from('du_college_courses')

@@ -23,6 +23,10 @@ import 'providers/auth_service.dart';
 import 'providers/notification_service.dart';
 import 'providers/du_wishlist_provider.dart';
 import 'providers/app_settings_provider.dart';
+import 'providers/du_preference_service.dart';
+import 'providers/du_community_service.dart';
+import 'providers/du_tracker_provider.dart';
+import 'providers/du_campus_service.dart';
 
 
 void main() async {
@@ -49,6 +53,10 @@ void main() async {
         ChangeNotifierProvider(create: (_) => NotificationService()),
         ChangeNotifierProvider(create: (_) => DuWishlistProvider()),
         ChangeNotifierProvider(create: (_) => AppSettingsProvider()),
+        ChangeNotifierProvider(create: (_) => DuPreferenceService()),
+        ChangeNotifierProvider(create: (_) => DuCommunityService()),
+        ChangeNotifierProvider(create: (_) => DuTrackerProvider(prefs)),
+        ChangeNotifierProvider(create: (_) => DuCampusService()),
       ],
       child: const MyApp(),
     ),

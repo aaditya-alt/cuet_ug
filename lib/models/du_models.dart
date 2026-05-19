@@ -13,7 +13,7 @@ class UserCuetSubject {
 class DuProgramResult {
   final String programName;
   final String degree; // e.g. 'B.Sc.'
-  final double userScore; // best combined score for this program (usually scaled to 1000)
+  final double userScore; // merit score for THIS specific program
   final double cutoffScore; // the cutoff from du_cutoffs
   final double difference; // userScore - cutoffScore
   final List<DuRoundCutoff> roundCutoffs; // all rounds' data for this program
@@ -22,6 +22,10 @@ class DuProgramResult {
   final bool isScaled; // whether the score was scaled to 1000
   final String chance; // Safe / Moderate / Difficult / Out of Range
   final String? note; // Priority note or other details
+
+  // Merit scheme fields — explain HOW the score was computed for this program
+  final int maxScore;       // 750 or 1000 depending on program type
+  final String meritScheme; // human-readable explanation for the student
 
   DuProgramResult({
     required this.programName,
@@ -35,6 +39,8 @@ class DuProgramResult {
     this.isScaled = false,
     this.chance = 'Safe',
     this.note,
+    this.maxScore = 1000,
+    this.meritScheme = '1 Language + 3 Domain Subjects',
   });
 }
 
@@ -232,5 +238,60 @@ class DuCollegeCourse {
       fees: json['fees'] as String?,
       eligibility: json['eligibility'] as String?,
     );
+  }
+}
+
+class DuPreferenceSheet {
+  final String id;
+  final String? userId;
+  final String userName;
+  final String userEmail;
+  final List<String> targetCourses;
+  final String campusPreference;
+  final String priorityFactor;
+  final List<Map<String, dynamic>> sheetData;
+  final DateTime createdAt;
+
+  DuPreferenceSheet({
+    required this.id,
+    this.userId,
+    required this.userName,
+    required this.userEmail,
+    required this.targetCourses,
+    required this.campusPreference,
+    required this.priorityFactor,
+    required this.sheetData,
+    required this.createdAt,
+  });
+
+  factory DuPreferenceSheet.fromJson(Map<String, dynamic> json) {
+    return DuPreferenceSheet(
+      id: json['id'] as String? ?? '',
+      userId: json['user_id'] as String?,
+      userName: json['user_name'] as String? ?? 'Anonymous',
+      userEmail: json['user_email'] as String? ?? 'No email',
+      targetCourses: (json['target_courses'] as List<dynamic>?)?.map((e) => e.toString()).toList() ?? [],
+      campusPreference: json['campus_preference'] as String? ?? 'Balanced',
+      priorityFactor: json['priority_factor'] as String? ?? 'Balanced',
+      sheetData: (json['sheet_data'] as List<dynamic>?)
+              ?.map((e) => Map<String, dynamic>.from(e as Map))
+              .toList() ??
+          [],
+      createdAt: json['created_at'] != null
+          ? DateTime.tryParse(json['created_at'].toString()) ?? DateTime.now()
+          : DateTime.now(),
+    );
+  }
+
+  Map<String, dynamic> toJson() {
+    return {
+      if (userId != null) 'user_id': userId,
+      'user_name': userName,
+      'user_email': userEmail,
+      'target_courses': targetCourses,
+      'campus_preference': campusPreference,
+      'priority_factor': priorityFactor,
+      'sheet_data': sheetData,
+    };
   }
 }
