@@ -17,11 +17,19 @@ class SharedWishlistScreen extends StatelessWidget {
     final theme = Theme.of(context);
     final isDark = theme.brightness == Brightness.dark;
 
-    // Resolve IDs to College Models from MockData
+    // Resolve IDs or Names to College Models from MockData
     final List<CollegeModel> sharedColleges = collegeIds
-        .map((id) {
+        .map((idOrName) {
           try {
-            return MockData.colleges.firstWhere((c) => c.id == id);
+            final decoded = Uri.decodeComponent(idOrName).toLowerCase().replaceAll(RegExp(r'\s+'), ' ').trim();
+            return MockData.colleges.firstWhere((c) {
+              final collegeNameLower = c.name.toLowerCase().trim();
+              final collegeIdLower = c.id.toLowerCase().trim();
+              return collegeIdLower == decoded || 
+                     collegeNameLower == decoded || 
+                     collegeNameLower.contains(decoded) ||
+                     decoded.contains(collegeNameLower);
+            });
           } catch (_) {
             return null;
           }

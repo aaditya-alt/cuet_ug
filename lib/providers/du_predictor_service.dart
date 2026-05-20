@@ -63,7 +63,7 @@ class DuPredictorService {
     'microbiology',
     'food technology',
     'geology',
-    'computer science',
+    'physical science',
     'electronics',
     'statistics',
     'instrumentation',
@@ -80,7 +80,8 @@ class DuPredictorService {
   };
 
   bool _isDomainOnlyProgram(String programName) {
-    final n = programName.toLowerCase()
+    final n = programName
+        .toLowerCase()
         .replaceAll('.', '')
         .replaceAll('(', ' ')
         .replaceAll(')', ' ')
@@ -90,6 +91,19 @@ class DuPredictorService {
     // Must be a B.Sc. programme (hons or otherwise)
     final isBsc = n.contains('bsc') || n.startsWith('b sc');
     if (!isBsc) return false;
+
+    if (n.contains('physical science')) {
+      return true; // always domain-only regardless of other keywords
+    }
+
+    // Mathematical Sciences (Mathematics, Computer Science, Statistics, Operational Research)
+    // require Language + 3 Domains, so they are not domain-only (they count out of 1000).
+    if (n.contains('mathematics') ||
+        n.contains('statistics') ||
+        n.contains('operational research') ||
+        n.contains('computer science')) {
+      return false;
+    }
 
     return _domainOnlyKeywords.any((kw) => n.contains(kw));
   }
@@ -111,7 +125,8 @@ class DuPredictorService {
       return _ProgramMerit(
         score: score,
         maxScore: 750,
-        scheme: '3 Domain Subjects Only (out of 750)\nLanguage is compulsory in CUET but NOT counted in merit',
+        scheme:
+            '3 Domain Subjects Only (out of 750)\nLanguage is compulsory in CUET but NOT counted in merit',
       );
     } else {
       // Standard: best language (250) + best 3 domains (750) = 1000
@@ -120,12 +135,12 @@ class DuPredictorService {
           : langScores.values.reduce((a, b) => a > b ? a : b);
       final sortedDomains = domainScores.values.toList()
         ..sort((a, b) => b.compareTo(a));
-      final topDomains =
-          sortedDomains.take(3).fold(0.0, (s, v) => s + v);
+      final topDomains = sortedDomains.take(3).fold(0.0, (s, v) => s + v);
       return _ProgramMerit(
         score: bestLang + topDomains,
         maxScore: 1000,
-        scheme: '1 Language (${bestLang.toInt()}) + 3 Domain Subjects out of 1000',
+        scheme:
+            '1 Language (${bestLang.toInt()}) + 3 Domain Subjects out of 1000',
       );
     }
   }
@@ -187,8 +202,9 @@ class DuPredictorService {
       final specific = langCombo['specific'] as List<dynamic>?;
       if (specific != null && specific.isNotEmpty) {
         final specNorm = specific.map((s) => _normSub(s.toString())).toSet();
-        final matched =
-            studentLangsNorm.where((l) => specNorm.contains(l)).length;
+        final matched = studentLangsNorm
+            .where((l) => specNorm.contains(l))
+            .length;
         langOk = matched >= 1 && studentLangsNorm.length >= count;
       } else {
         langOk = studentLangsNorm.length >= count;
@@ -208,19 +224,18 @@ class DuPredictorService {
       if (specific == null || specific.isEmpty) {
         domainOk = studentDomainsNorm.length >= count;
       } else {
-        final specNorm =
-            specific.map((s) => _normSub(s.toString())).toList();
+        final specNorm = specific.map((s) => _normSub(s.toString())).toList();
         if (logic == 'any') {
           domainOk = studentDomainsNorm.length >= count;
         } else if (logic == 'all') {
           domainOk = specNorm.every((sp) => studentDomainsNorm.contains(sp));
         } else if (logic == 'must_include') {
-          final hasAll =
-              specNorm.every((sp) => studentDomainsNorm.contains(sp));
+          final hasAll = specNorm.every(
+            (sp) => studentDomainsNorm.contains(sp),
+          );
           domainOk = hasAll && studentDomainsNorm.length >= count;
         } else if (logic == 'at_least_one') {
-          final hasOne =
-              specNorm.any((sp) => studentDomainsNorm.contains(sp));
+          final hasOne = specNorm.any((sp) => studentDomainsNorm.contains(sp));
           domainOk = hasOne && studentDomainsNorm.length >= count;
         } else {
           domainOk = studentDomainsNorm.length >= count;
@@ -259,8 +274,7 @@ class DuPredictorService {
         _isDisciplineSatisfied(parts[1], studentDomains);
   }
 
-  bool _isDisciplineSatisfied(
-      String discipline, List<String> studentDomains) {
+  bool _isDisciplineSatisfied(String discipline, List<String> studentDomains) {
     if (_cachedBaSubjectMap == null) return true;
     final mapRow = _cachedBaSubjectMap!.firstWhere(
       (m) => _normSub(m['discipline'].toString()) == _normSub(discipline),
@@ -282,23 +296,30 @@ class DuPredictorService {
       final eligLower = elig.toLowerCase();
       if (_normProg(elig) == _normProg(cutoffName)) return elig;
       if (lower.contains('financial investment') &&
-          eligLower.contains('financial investment')) return elig;
+          eligLower.contains('financial investment'))
+        return elig;
       if (lower.contains('bachelor of management studies') &&
-          eligLower.contains('bachelor of management studies')) return elig;
+          eligLower.contains('bachelor of management studies'))
+        return elig;
       if (lower.contains('elementary education') &&
-          eligLower.contains('elementary education')) return elig;
+          eligLower.contains('elementary education'))
+        return elig;
       if (lower.contains('bachelor of fine arts') &&
-          eligLower.contains('bachelor of fine arts')) return elig;
+          eligLower.contains('bachelor of fine arts'))
+        return elig;
       if (lower.contains('five year') &&
           lower.contains('journalism') &&
-          eligLower.contains('journalism')) return elig;
+          eligLower.contains('journalism'))
+        return elig;
       if (lower.contains('information technology') &&
           lower.contains('mathematical') &&
-          eligLower.contains('information technology')) return elig;
+          eligLower.contains('information technology'))
+        return elig;
       if (lower.contains('physical education') &&
           lower.contains('health education') &&
           eligLower.contains('physical education') &&
-          eligLower.contains('health education')) return elig;
+          eligLower.contains('health education'))
+        return elig;
       if (lower.contains('applied physical sciences') &&
           eligLower.contains('applied physical sciences')) {
         if (lower.contains('industrial') && eligLower.contains('industrial'))
@@ -316,7 +337,7 @@ class DuPredictorService {
   // MAIN PREDICT  ─  now accepts per-subject scores
   // ─────────────────────────────────────────────────────────────────────────
   Future<List<DuCollegeDetails>> predict({
-    required Map<String, double> langScores,   // subject → score (0-250)
+    required Map<String, double> langScores, // subject → score (0-250)
     required Map<String, double> domainScores, // subject → score (0-250)
     required bool studentHasGat,
     required String studentCategory,
@@ -328,11 +349,13 @@ class DuPredictorService {
     try {
       if (langScores.isEmpty) {
         throw ArgumentError(
-            'Please select at least one language (List A) subject.');
+          'Please select at least one language (List A) subject.',
+        );
       }
       if (domainScores.isEmpty) {
         throw ArgumentError(
-            'Please select at least one domain (List B) subject.');
+          'Please select at least one domain (List B) subject.',
+        );
       }
 
       final studentLanguages = langScores.keys.toList();
@@ -369,8 +392,7 @@ class DuPredictorService {
             studentHasGat,
           )) {
             eligible = true;
-            if ((combo['priority'] as int? ?? 1) != 2)
-              hasOnlyPriority2 = false;
+            if ((combo['priority'] as int? ?? 1) != 2) hasOnlyPriority2 = false;
             matchedNote ??= combo['note'] as String?;
           }
         }
@@ -450,7 +472,10 @@ class DuPredictorService {
             matchedProgramKey = exactMatch;
             degree = programDegrees[exactMatch] ?? '';
           } else {
-            final fallback = _fallbackMatch(pName, eligiblePrograms.keys.toList());
+            final fallback = _fallbackMatch(
+              pName,
+              eligiblePrograms.keys.toList(),
+            );
             if (fallback != null) {
               isRowEligible = true;
               matchedProgramKey = fallback;
@@ -516,18 +541,20 @@ class DuPredictorService {
 
         groupedByCollege
             .putIfAbsent(entry.collegeName, () => [])
-            .add(DuProgramResult(
-              programName: entry.programName,
-              degree: entry.degree,
-              userScore: merit.score,
-              cutoffScore: bestCutoff,
-              difference: double.parse(diff.toStringAsFixed(2)),
-              roundCutoffs: sortedRounds,
-              chance: chance,
-              note: programNotes[entry.matchedProgramKey],
-              maxScore: merit.maxScore,
-              meritScheme: merit.scheme,
-            ));
+            .add(
+              DuProgramResult(
+                programName: entry.programName,
+                degree: entry.degree,
+                userScore: merit.score,
+                cutoffScore: bestCutoff,
+                difference: double.parse(diff.toStringAsFixed(2)),
+                roundCutoffs: sortedRounds,
+                chance: chance,
+                note: programNotes[entry.matchedProgramKey],
+                maxScore: merit.maxScore,
+                meritScheme: merit.scheme,
+              ),
+            );
       }
 
       // ── Step 7: Assemble final list ───────────────────────────────────────

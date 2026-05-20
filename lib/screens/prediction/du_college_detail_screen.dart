@@ -8,6 +8,10 @@ import 'package:share_plus/share_plus.dart';
 import '../../models/du_models.dart';
 import '../../providers/du_predictor_service.dart';
 import '../../providers/du_wishlist_provider.dart';
+import '../../data/mock_data.dart';
+import '../../models/college_model.dart';
+import '../../providers/compare_provider.dart';
+import '../compare/compare_screen.dart';
 
 class DuCollegeDetailScreen extends StatefulWidget {
   final DuCollegeData college;
@@ -66,6 +70,8 @@ class _DuCollegeDetailScreenState extends State<DuCollegeDetailScreen>
               .join('\n')
         : 'Multiple programs available';
 
+    final shareUrl = 'https://cuet.collegemitra.net.in/college?name=${Uri.encodeComponent(c.collegeName)}';
+
     final text = '''
 🎓 ${c.collegeName}
 📍 ${c.campusType ?? 'Delhi University'} | Est. ${c.established ?? 'N/A'}
@@ -75,7 +81,7 @@ ${c.naacGrade != null ? '🏆 NAAC ${c.naacGrade}' : ''}${c.nirfRanking != null 
 $programs
 
 🔗 Check your chances at this college:
-https://cuet.collegemitra.net.in/college/${c.id}
+$shareUrl
 
 ✨ Predict your dream DU college with 99% accuracy!
 Download DU Cutoff Predictor 2025 — completely FREE!
@@ -172,6 +178,61 @@ https://cuet.collegemitra.net.in'''.trim();
                     ),
                   );
                 },
+              ),
+              Builder(
+                builder: (context) {
+                  CollegeModel? resolvedModel;
+                  try {
+                    resolvedModel = MockData.colleges.firstWhere(
+                      (c) => c.name.toLowerCase() == widget.college.collegeName.toLowerCase(),
+                    );
+                  } catch (_) {}
+
+                  if (resolvedModel == null) return const SizedBox.shrink();
+
+                  return Consumer<CompareProvider>(
+                    builder: (ctx, compareProvider, _) {
+                      final inCompare = compareProvider.isInCompare(resolvedModel!.id);
+                      return Padding(
+                        padding: const EdgeInsets.only(right: 4),
+                        child: ClipRRect(
+                          borderRadius: BorderRadius.circular(12),
+                          child: BackdropFilter(
+                            filter: ImageFilter.blur(sigmaX: 10, sigmaY: 10),
+                            child: Container(
+                              color: Colors.black.withOpacity(0.3),
+                              child: IconButton(
+                                icon: Icon(
+                                  LucideIcons.gitCompare,
+                                  color: inCompare ? Colors.greenAccent : Colors.white,
+                                ),
+                                onPressed: () {
+                                  final added = compareProvider.toggleCompare(resolvedModel!);
+                                  if (!added && !compareProvider.isInCompare(resolvedModel!.id) && compareProvider.count >= 2) {
+                                    ScaffoldMessenger.of(context).showSnackBar(
+                                      const SnackBar(
+                                        content: Text('Comparison list is full! Max 2 colleges can be compared.'),
+                                        behavior: SnackBarBehavior.floating,
+                                      ),
+                                    );
+                                  } else {
+                                    ScaffoldMessenger.of(context).showSnackBar(
+                                      SnackBar(
+                                        content: Text(added ? 'Added to compare list 📋' : 'Removed from compare list'),
+                                        behavior: SnackBarBehavior.floating,
+                                        duration: const Duration(seconds: 2),
+                                      ),
+                                    );
+                                  }
+                                },
+                              ),
+                            ),
+                          ),
+                        ),
+                      );
+                    },
+                  );
+                }
               ),
               Padding(
                 padding: const EdgeInsets.only(right: 8),

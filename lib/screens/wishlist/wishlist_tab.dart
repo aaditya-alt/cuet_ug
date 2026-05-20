@@ -91,9 +91,9 @@ class _WishlistTabState extends State<WishlistTab>
             ),
             IconButton(
               onPressed: () {
-                final ids = wishlist.map((c) => c.id).join(',');
+                final names = wishlist.map((c) => Uri.encodeComponent(c.name)).join(',');
                 final shareUrl =
-                    'https://cuet.collegemitra.net.in/wishlist?ids=$ids';
+                    'https://cuet.collegemitra.net.in/wishlist?names=$names';
                 String text =
                     '🎒 Check out my DU CUET UG Preference List! 🎓\n\n';
                 for (int i = 0; i < wishlist.length; i++) {
@@ -151,6 +151,9 @@ class _WishlistTabState extends State<WishlistTab>
             IconButton(
               onPressed: () {
                 final items = duWishlist.items;
+                final names = items.map((i) => Uri.encodeComponent(i.collegeName)).join(',');
+                final shareUrl =
+                    'https://cuet.collegemitra.net.in/wishlist?names=$names';
                 String text =
                     '🎓 Check out my DU CUET UG College Predictor Saved List! 🎯\n\n';
                 for (int i = 0; i < items.length; i++) {
@@ -162,7 +165,9 @@ class _WishlistTabState extends State<WishlistTab>
                   }
                 }
                 text +=
-                    '\n🔥 Predict your own dream college with 99% accuracy using DU Cutoff Predictor 2025!';
+                    '\n🔗 Open and import my preference list inside the app:\n$shareUrl\n\n';
+                text +=
+                    '🔥 Predict your own dream college with 99% accuracy using DU Cutoff Predictor 2025!';
                 Share.share(text);
               },
               icon: const Icon(LucideIcons.share2),

@@ -114,10 +114,10 @@ class MyApp extends StatefulWidget {
     // Handle https://cuet.collegemitra.net.in/wishlist?ids=... or cuet://wishlist?ids=...
     if ((uri.pathSegments.isNotEmpty && uri.pathSegments[0] == 'wishlist') ||
         (uri.scheme == 'cuet' && uri.host == 'wishlist')) {
-      final idsStr = uri.queryParameters['ids'];
+      final idsStr = uri.queryParameters['ids'] ?? uri.queryParameters['names'];
       if (idsStr != null) {
         final ids = idsStr.split(',').where((id) => id.trim().isNotEmpty).toList();
-        debugPrint('Received shared wishlist with IDs: $ids');
+        debugPrint('Received shared wishlist with IDs/Names: $ids');
         
         WidgetsBinding.instance.addPostFrameCallback((_) {
           navigatorKey.currentState?.push(
@@ -138,9 +138,13 @@ class MyApp extends StatefulWidget {
     else if (uri.scheme == 'cuet' && uri.host == 'college') {
       collegeId = uri.pathSegments.isNotEmpty ? uri.pathSegments[0] : null;
     }
-    // Handle cuet://college?id=...
-    else if (uri.scheme == 'cuet' && uri.queryParameters.containsKey('id')) {
-      collegeId = uri.queryParameters['id'];
+    // Handle cuet://college?id=... or ?name=...
+    else if (uri.scheme == 'cuet') {
+      collegeId = uri.queryParameters['id'] ?? uri.queryParameters['name'];
+    }
+    // Handle https://cuet.collegemitra.net.in/college?name=... or ?id=...
+    else if (uri.pathSegments.isNotEmpty && uri.pathSegments[0] == 'college') {
+      collegeId = uri.queryParameters['name'] ?? uri.queryParameters['id'];
     }
 
     // Handle password reset: cuet://reset-password#access_token=...
@@ -156,10 +160,22 @@ class MyApp extends StatefulWidget {
       return;
     }
 
-    if (collegeId != null) {
-      debugPrint('Attempting to navigate to college: $collegeId');
+    final collegeSearch = collegeId ?? uri.queryParameters['name'] ?? uri.queryParameters['id'];
+    if (collegeSearch != null) {
+      debugPrint('Attempting to navigate to college: $collegeSearch');
       try {
-        final college = MockData.colleges.firstWhere((c) => c.id == collegeId);
+        final searchSlug = collegeSearch.toLowerCase().replaceAll(RegExp(r'[^a-z0-9]'), '').trim();
+        final college = MockData.colleges.firstWhere((c) {
+          final idSlug = c.id.toLowerCase().replaceAll(RegExp(r'[^a-z0-9]'), '').trim();
+          final nameSlug = c.name.toLowerCase().replaceAll(RegExp(r'[^a-z0-9]'), '').trim();
+          
+          return idSlug == searchSlug || 
+                 nameSlug == searchSlug ||
+                 c.id.toLowerCase() == collegeSearch.toLowerCase() ||
+                 c.name.toLowerCase() == collegeSearch.toLowerCase() ||
+                 (RegExp(r'^\d+$').hasMatch(collegeSearch) && c.id.endsWith('_$collegeSearch'));
+        });
+
         WidgetsBinding.instance.addPostFrameCallback((_) {
           navigatorKey.currentState?.push(
             MaterialPageRoute(
@@ -168,7 +184,7 @@ class MyApp extends StatefulWidget {
           );
         });
       } catch (e) {
-        debugPrint('College not found for ID: $collegeId');
+        debugPrint('College not found for Search query: $collegeSearch');
       }
     }
   }

@@ -24,7 +24,7 @@ class DuProgramResult {
   final String? note; // Priority note or other details
 
   // Merit scheme fields — explain HOW the score was computed for this program
-  final int maxScore;       // 750 or 1000 depending on program type
+  final int maxScore; // 750 or 1000 depending on program type
   final String meritScheme; // human-readable explanation for the student
 
   DuProgramResult({
@@ -82,7 +82,7 @@ class DuCollegeDetails {
   final int? placementYear;
   final List<dynamic>? notableAlumni;
   final String? description;
-  
+
   // Predictor specific fields
   final List<DuProgramResult> programs;
   final String? logoUrl;
@@ -180,24 +180,37 @@ class DuCollegeDetails {
   factory DuCollegeDetails.fromJson(Map<String, dynamic> json) {
     return DuCollegeDetails(
       id: json['id'] as int? ?? 0,
-      collegeName: json['college_name'] as String? ?? json['name'] as String? ?? '',
+      collegeName:
+          json['college_name'] as String? ?? json['name'] as String? ?? '',
       established: json['established'] as int?,
       campusType: json['campus_type'] as String?,
       address: json['address'] as String?,
       nearestMetro: json['nearest_metro'] as String?,
       mainImageUrl: json['main_image_url'] as String?,
-      extraImages: (json['extra_images'] as List<dynamic>?)?.map((e) => e.toString()).toList() ?? [],
+      extraImages:
+          (json['extra_images'] as List<dynamic>?)
+              ?.map((e) => e.toString())
+              .toList() ??
+          [],
       website: json['website'] as String?,
       principal: json['principal'] as String?,
       affiliation: json['affiliation'] as String?,
       naacGrade: json['naac_grade'] as String?,
       nirfRanking: json['nirf_ranking'] as int?,
       nirfYear: json['nirf_year'] as int?,
-      facilities: (json['facilities'] as List<dynamic>?)?.map((e) => e.toString()).toList() ?? [],
+      facilities:
+          (json['facilities'] as List<dynamic>?)
+              ?.map((e) => e.toString())
+              .toList() ??
+          [],
       hostelAvailable: json['hostel_available'] as bool? ?? false,
       hostelType: json['hostel_type'] as String?,
       hostelFees: json['hostel_fees'] as Map<String, dynamic>?,
-      hostelAmenities: (json['hostel_amenities'] as List<dynamic>?)?.map((e) => e.toString()).toList() ?? [],
+      hostelAmenities:
+          (json['hostel_amenities'] as List<dynamic>?)
+              ?.map((e) => e.toString())
+              .toList() ??
+          [],
       placementAvg: (json['placement_avg'] as num?)?.toDouble(),
       placementHighest: (json['placement_highest'] as num?)?.toDouble(),
       placementPercent: (json['placement_percent'] as num?)?.toDouble(),
@@ -250,7 +263,11 @@ class DuPreferenceSheet {
   final String campusPreference;
   final String priorityFactor;
   final List<Map<String, dynamic>> sheetData;
-  final DateTime createdAt;
+  final DateTime? createdAt;
+
+  /// True if this sheet has been successfully written to Supabase.
+  /// Stored locally as '_synced'. Never sent to Supabase as a column.
+  final bool syncedToServer;
 
   DuPreferenceSheet({
     required this.id,
@@ -261,29 +278,86 @@ class DuPreferenceSheet {
     required this.campusPreference,
     required this.priorityFactor,
     required this.sheetData,
-    required this.createdAt,
+    this.createdAt,
+    this.syncedToServer = false,
   });
 
+  // ── copyWith ──────────────────────────────────────────────────────────────
+  DuPreferenceSheet copyWith({
+    String? id,
+    String? userId,
+    String? userName,
+    String? userEmail,
+    List<String>? targetCourses,
+    String? campusPreference,
+    String? priorityFactor,
+    List<Map<String, dynamic>>? sheetData,
+    DateTime? createdAt,
+    bool? syncedToServer,
+  }) {
+    return DuPreferenceSheet(
+      id: id ?? this.id,
+      userId: userId ?? this.userId,
+      userName: userName ?? this.userName,
+      userEmail: userEmail ?? this.userEmail,
+      targetCourses: targetCourses ?? this.targetCourses,
+      campusPreference: campusPreference ?? this.campusPreference,
+      priorityFactor: priorityFactor ?? this.priorityFactor,
+      sheetData: sheetData ?? this.sheetData,
+      createdAt: createdAt ?? this.createdAt,
+      syncedToServer: syncedToServer ?? this.syncedToServer,
+    );
+  }
+
+  // ── fromJson ──────────────────────────────────────────────────────────────
   factory DuPreferenceSheet.fromJson(Map<String, dynamic> json) {
     return DuPreferenceSheet(
       id: json['id'] as String? ?? '',
       userId: json['user_id'] as String?,
       userName: json['user_name'] as String? ?? 'Anonymous',
-      userEmail: json['user_email'] as String? ?? 'No email',
-      targetCourses: (json['target_courses'] as List<dynamic>?)?.map((e) => e.toString()).toList() ?? [],
+      userEmail: json['user_email'] as String? ?? '',
+      targetCourses:
+          (json['target_courses'] as List<dynamic>?)
+              ?.map((e) => e.toString())
+              .toList() ??
+          [],
       campusPreference: json['campus_preference'] as String? ?? 'Balanced',
       priorityFactor: json['priority_factor'] as String? ?? 'Balanced',
-      sheetData: (json['sheet_data'] as List<dynamic>?)
+      sheetData:
+          (json['sheet_data'] as List<dynamic>?)
               ?.map((e) => Map<String, dynamic>.from(e as Map))
               .toList() ??
           [],
       createdAt: json['created_at'] != null
-          ? DateTime.tryParse(json['created_at'].toString()) ?? DateTime.now()
-          : DateTime.now(),
+          ? DateTime.tryParse(json['created_at'].toString())
+          : null,
+      // '_synced' is a local-only flag — never comes from Supabase,
+      // so rows fetched from the server are implicitly synced (default true).
+      syncedToServer: json['_synced'] as bool? ?? true,
     );
   }
 
+  // ── toJson ────────────────────────────────────────────────────────────────
+  /// Full serialisation for local SharedPreferences cache.
+  /// Includes '_synced' so the flag survives app restarts.
+  /// Do NOT pass this directly to Supabase — use [toSupabaseJson] instead.
   Map<String, dynamic> toJson() {
+    return {
+      'id': id,
+      if (userId != null) 'user_id': userId,
+      'user_name': userName,
+      'user_email': userEmail,
+      'target_courses': targetCourses,
+      'campus_preference': campusPreference,
+      'priority_factor': priorityFactor,
+      'sheet_data': sheetData,
+      if (createdAt != null) 'created_at': createdAt!.toIso8601String(),
+      '_synced': syncedToServer, // local-only flag
+    };
+  }
+
+  /// Supabase-safe payload — strips local-only fields.
+  Map<String, dynamic> toSupabaseJson() {
     return {
       if (userId != null) 'user_id': userId,
       'user_name': userName,
@@ -292,6 +366,7 @@ class DuPreferenceSheet {
       'campus_preference': campusPreference,
       'priority_factor': priorityFactor,
       'sheet_data': sheetData,
+      if (createdAt != null) 'created_at': createdAt!.toIso8601String(),
     };
   }
 }

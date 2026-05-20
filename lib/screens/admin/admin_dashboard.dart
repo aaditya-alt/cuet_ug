@@ -64,9 +64,15 @@ class _AdminDashboardState extends State<AdminDashboard>
   bool _isPublishingTimeline = false;
 
   // CSAS Tracker Deadline Controllers
-  final _trackerP1Controller = TextEditingController(text: '2026-06-15 23:59:59');
-  final _trackerP2Controller = TextEditingController(text: '2026-07-05 23:59:59');
-  final _trackerP3Controller = TextEditingController(text: '2026-07-20 23:59:59');
+  final _trackerP1Controller = TextEditingController(
+    text: '2026-06-15 23:59:59',
+  );
+  final _trackerP2Controller = TextEditingController(
+    text: '2026-07-05 23:59:59',
+  );
+  final _trackerP3Controller = TextEditingController(
+    text: '2026-07-20 23:59:59',
+  );
   bool _isSavingDeadlines = false;
 
   // Campus Hub Form Controllers
@@ -356,7 +362,9 @@ class _AdminDashboardState extends State<AdminDashboard>
     final isDark = theme.brightness == Brightness.dark;
 
     return Scaffold(
-      backgroundColor: isDark ? const Color(0xFF0A0E14) : const Color(0xFFF8F9FF),
+      backgroundColor: isDark
+          ? const Color(0xFF0A0E14)
+          : const Color(0xFFF8F9FF),
       appBar: AppBar(
         title: Text(
           'DUVerse Admin Portal 👑',
@@ -458,19 +466,17 @@ class _AdminDashboardState extends State<AdminDashboard>
         child: Container(
           padding: const EdgeInsets.symmetric(vertical: 12),
           decoration: BoxDecoration(
-            color: isSelected 
-                ? theme.colorScheme.primary 
-                : Colors.transparent,
+            color: isSelected ? theme.colorScheme.primary : Colors.transparent,
             borderRadius: BorderRadius.circular(12),
           ),
           child: Column(
             mainAxisSize: MainAxisSize.min,
             children: [
               Icon(
-                icon, 
-                size: 16, 
-                color: isSelected 
-                    ? Colors.white 
+                icon,
+                size: 16,
+                color: isSelected
+                    ? Colors.white
                     : (isDark ? Colors.white54 : Colors.black54),
               ),
               const SizedBox(height: 4),
@@ -479,8 +485,8 @@ class _AdminDashboardState extends State<AdminDashboard>
                 style: GoogleFonts.outfit(
                   fontSize: 10,
                   fontWeight: FontWeight.bold,
-                  color: isSelected 
-                      ? Colors.white 
+                  color: isSelected
+                      ? Colors.white
                       : (isDark ? Colors.white54 : Colors.black54),
                 ),
               ),
@@ -569,8 +575,8 @@ class _AdminDashboardState extends State<AdminDashboard>
       padding: const EdgeInsets.only(right: 8),
       child: ChoiceChip(
         avatar: Icon(
-          icon, 
-          size: 14, 
+          icon,
+          size: 14,
           color: isSelected ? Colors.white : theme.colorScheme.primary,
         ),
         label: Text(
@@ -615,7 +621,6 @@ class _AdminDashboardState extends State<AdminDashboard>
         return _buildAnnouncementsTab(theme);
     }
   }
-
 
   Widget _buildAnnouncementsTab(ThemeData theme) {
     return SingleChildScrollView(
@@ -1375,7 +1380,7 @@ class _AdminDashboardState extends State<AdminDashboard>
               ),
             ),
           ),
-          
+
           const SizedBox(height: 32),
           const Divider(),
           const SizedBox(height: 24),
@@ -1400,7 +1405,8 @@ class _AdminDashboardState extends State<AdminDashboard>
                   TextFormField(
                     controller: _trackerP1Controller,
                     decoration: const InputDecoration(
-                      labelText: 'Phase 1 Target Deadline (YYYY-MM-DD HH:MM:SS)',
+                      labelText:
+                          'Phase 1 Target Deadline (YYYY-MM-DD HH:MM:SS)',
                       border: OutlineInputBorder(),
                       prefixIcon: Icon(LucideIcons.calendar),
                     ),
@@ -1409,7 +1415,8 @@ class _AdminDashboardState extends State<AdminDashboard>
                   TextFormField(
                     controller: _trackerP2Controller,
                     decoration: const InputDecoration(
-                      labelText: 'Phase 2 Target Deadline (YYYY-MM-DD HH:MM:SS)',
+                      labelText:
+                          'Phase 2 Target Deadline (YYYY-MM-DD HH:MM:SS)',
                       border: OutlineInputBorder(),
                       prefixIcon: Icon(LucideIcons.calendar),
                     ),
@@ -1418,7 +1425,8 @@ class _AdminDashboardState extends State<AdminDashboard>
                   TextFormField(
                     controller: _trackerP3Controller,
                     decoration: const InputDecoration(
-                      labelText: 'Phase 3 Target Deadline (YYYY-MM-DD HH:MM:SS)',
+                      labelText:
+                          'Phase 3 Target Deadline (YYYY-MM-DD HH:MM:SS)',
                       border: OutlineInputBorder(),
                       prefixIcon: Icon(LucideIcons.calendar),
                     ),
@@ -1428,56 +1436,80 @@ class _AdminDashboardState extends State<AdminDashboard>
                     width: double.infinity,
                     height: 50,
                     child: ElevatedButton.icon(
-                      onPressed: _isSavingDeadlines ? null : () async {
-                        setState(() => _isSavingDeadlines = true);
-                        try {
-                          final p1 = DateTime.parse(_trackerP1Controller.text.trim());
-                          final p2 = DateTime.parse(_trackerP2Controller.text.trim());
-                          final p3 = DateTime.parse(_trackerP3Controller.text.trim());
+                      onPressed: _isSavingDeadlines
+                          ? null
+                          : () async {
+                              setState(() => _isSavingDeadlines = true);
+                              try {
+                                final p1 = DateTime.parse(
+                                  _trackerP1Controller.text.trim(),
+                                );
+                                final p2 = DateTime.parse(
+                                  _trackerP2Controller.text.trim(),
+                                );
+                                final p3 = DateTime.parse(
+                                  _trackerP3Controller.text.trim(),
+                                );
 
-                          final success = await Provider.of<DuTrackerProvider>(context, listen: false)
-                              .updateDeadlines(p1: p1, p2: p2, p3: p3);
+                                final success =
+                                    await Provider.of<DuTrackerProvider>(
+                                      context,
+                                      listen: false,
+                                    ).updateDeadlines(p1: p1, p2: p2, p3: p3);
 
-                          if (mounted) {
-                            ScaffoldMessenger.of(context).showSnackBar(
-                              SnackBar(
-                                content: Text(success 
-                                    ? 'Admissions deadlines synced & updated successfully!' 
-                                    : 'Updated locally (Supabase table connection skipped).'),
-                                backgroundColor: success ? Colors.green : Colors.orange,
-                                behavior: SnackBarBehavior.floating,
-                              ),
-                            );
-                          }
-                        } catch (e) {
-                          ScaffoldMessenger.of(context).showSnackBar(
-                            SnackBar(
-                              content: Text('Invalid Date/Time Format: ${e.toString()}'),
-                              backgroundColor: Colors.red,
-                              behavior: SnackBarBehavior.floating,
-                            ),
-                          );
-                        } finally {
-                          if (mounted) {
-                            setState(() => _isSavingDeadlines = false);
-                          }
-                        }
-                      },
+                                if (mounted) {
+                                  ScaffoldMessenger.of(context).showSnackBar(
+                                    SnackBar(
+                                      content: Text(
+                                        success
+                                            ? 'Admissions deadlines synced & updated successfully!'
+                                            : 'Updated locally (Supabase table connection skipped).',
+                                      ),
+                                      backgroundColor: success
+                                          ? Colors.green
+                                          : Colors.orange,
+                                      behavior: SnackBarBehavior.floating,
+                                    ),
+                                  );
+                                }
+                              } catch (e) {
+                                ScaffoldMessenger.of(context).showSnackBar(
+                                  SnackBar(
+                                    content: Text(
+                                      'Invalid Date/Time Format: ${e.toString()}',
+                                    ),
+                                    backgroundColor: Colors.red,
+                                    behavior: SnackBarBehavior.floating,
+                                  ),
+                                );
+                              } finally {
+                                if (mounted) {
+                                  setState(() => _isSavingDeadlines = false);
+                                }
+                              }
+                            },
                       icon: _isSavingDeadlines
                           ? const SizedBox(
                               width: 20,
                               height: 20,
-                              child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white),
+                              child: CircularProgressIndicator(
+                                strokeWidth: 2,
+                                color: Colors.white,
+                              ),
                             )
                           : const Icon(LucideIcons.save),
                       label: Text(
-                        _isSavingDeadlines ? 'Saving & Syncing...' : 'Save & Sync Target Deadlines',
+                        _isSavingDeadlines
+                            ? 'Saving & Syncing...'
+                            : 'Save & Sync Target Deadlines',
                         style: GoogleFonts.outfit(fontWeight: FontWeight.bold),
                       ),
                       style: ElevatedButton.styleFrom(
                         backgroundColor: theme.colorScheme.primary,
                         foregroundColor: Colors.white,
-                        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                        shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(12),
+                        ),
                       ),
                     ),
                   ),
@@ -2007,7 +2039,7 @@ class _AdminDashboardState extends State<AdminDashboard>
                                   ),
                                 ),
                                 Text(
-                                  _formatDate(sheet.createdAt),
+                                  _formatDate(sheet.createdAt!),
                                   style: GoogleFonts.outfit(
                                     fontSize: 12,
                                     color: Colors.grey,
@@ -2446,7 +2478,9 @@ class _AdminDashboardState extends State<AdminDashboard>
 
           // Add / Edit Form Card
           Card(
-            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(24)),
+            shape: RoundedRectangleBorder(
+              borderRadius: BorderRadius.circular(24),
+            ),
             child: Padding(
               padding: const EdgeInsets.all(20),
               child: Form(
@@ -2461,7 +2495,8 @@ class _AdminDashboardState extends State<AdminDashboard>
                         border: OutlineInputBorder(),
                         prefixIcon: Icon(LucideIcons.school),
                       ),
-                      validator: (v) => v == null || v.isEmpty ? 'Required' : null,
+                      validator: (v) =>
+                          v == null || v.isEmpty ? 'Required' : null,
                     ),
                     const SizedBox(height: 16),
                     Row(
@@ -2480,7 +2515,8 @@ class _AdminDashboardState extends State<AdminDashboard>
                               );
                             }).toList(),
                             onChanged: (val) {
-                              if (val != null) setState(() => _campusSelectedType = val);
+                              if (val != null)
+                                setState(() => _campusSelectedType = val);
                             },
                           ),
                         ),
@@ -2492,14 +2528,17 @@ class _AdminDashboardState extends State<AdminDashboard>
                               labelText: 'Metro Line',
                               border: OutlineInputBorder(),
                             ),
-                            items: ['Yellow', 'Pink', 'Violet', 'Blue'].map((c) {
+                            items: ['Yellow', 'Pink', 'Violet', 'Blue'].map((
+                              c,
+                            ) {
                               return DropdownMenuItem<String>(
                                 value: c,
                                 child: Text(c),
                               );
                             }).toList(),
                             onChanged: (val) {
-                              if (val != null) setState(() => _campusSelectedLine = val);
+                              if (val != null)
+                                setState(() => _campusSelectedLine = val);
                             },
                           ),
                         ),
@@ -2514,7 +2553,8 @@ class _AdminDashboardState extends State<AdminDashboard>
                         border: OutlineInputBorder(),
                         prefixIcon: Icon(LucideIcons.train),
                       ),
-                      validator: (v) => v == null || v.isEmpty ? 'Required' : null,
+                      validator: (v) =>
+                          v == null || v.isEmpty ? 'Required' : null,
                     ),
                     const SizedBox(height: 16),
                     Row(
@@ -2527,7 +2567,8 @@ class _AdminDashboardState extends State<AdminDashboard>
                               labelText: 'Walking Distance (mins)',
                               border: OutlineInputBorder(),
                             ),
-                            validator: (v) => v == null || v.isEmpty ? 'Required' : null,
+                            validator: (v) =>
+                                v == null || v.isEmpty ? 'Required' : null,
                           ),
                         ),
                         const SizedBox(width: 12),
@@ -2539,7 +2580,8 @@ class _AdminDashboardState extends State<AdminDashboard>
                               labelText: 'Rickshaw Fare (₹)',
                               border: OutlineInputBorder(),
                             ),
-                            validator: (v) => v == null || v.isEmpty ? 'Required' : null,
+                            validator: (v) =>
+                                v == null || v.isEmpty ? 'Required' : null,
                           ),
                         ),
                         const SizedBox(width: 12),
@@ -2551,7 +2593,8 @@ class _AdminDashboardState extends State<AdminDashboard>
                               labelText: 'Avg PG Rent (₹)',
                               border: OutlineInputBorder(),
                             ),
-                            validator: (v) => v == null || v.isEmpty ? 'Required' : null,
+                            validator: (v) =>
+                                v == null || v.isEmpty ? 'Required' : null,
                           ),
                         ),
                       ],
@@ -2571,7 +2614,8 @@ class _AdminDashboardState extends State<AdminDashboard>
                         );
                       }).toList(),
                       onChanged: (val) {
-                        if (val != null) setState(() => _campusSelectedSafety = val);
+                        if (val != null)
+                          setState(() => _campusSelectedSafety = val);
                       },
                     ),
                     const SizedBox(height: 16),
@@ -2580,68 +2624,113 @@ class _AdminDashboardState extends State<AdminDashboard>
                       maxLines: 3,
                       decoration: const InputDecoration(
                         labelText: 'Transit & PG Description details',
-                        hintText: 'Mention PG localities nearby, shared rickshaw details, or tips...',
+                        hintText:
+                            'Mention PG localities nearby, shared rickshaw details, or tips...',
                         border: OutlineInputBorder(),
                       ),
-                      validator: (v) => v == null || v.isEmpty ? 'Required' : null,
+                      validator: (v) =>
+                          v == null || v.isEmpty ? 'Required' : null,
                     ),
                     const SizedBox(height: 24),
                     SizedBox(
                       width: double.infinity,
                       height: 50,
                       child: ElevatedButton.icon(
-                        onPressed: _isPublishingCampusGuide ? null : () async {
-                          if (!_campusFormKey.currentState!.validate()) return;
-                          setState(() => _isPublishingCampusGuide = true);
+                        onPressed: _isPublishingCampusGuide
+                            ? null
+                            : () async {
+                                if (!_campusFormKey.currentState!.validate())
+                                  return;
+                                setState(() => _isPublishingCampusGuide = true);
 
-                          final college = _campusCollegeNameController.text.trim();
-                          final id = '${college.split(' ').first.toLowerCase()}_guide_${DateTime.now().millisecondsSinceEpoch}';
+                                final college = _campusCollegeNameController
+                                    .text
+                                    .trim();
+                                final id =
+                                    '${college.split(' ').first.toLowerCase()}_guide_${DateTime.now().millisecondsSinceEpoch}';
 
-                          final newItem = CampusGuideItem(
-                            id: id,
-                            collegeName: college,
-                            campusType: _campusSelectedType.toLowerCase(),
-                            nearestMetro: _campusNearestMetroController.text.trim(),
-                            metroLine: _campusSelectedLine,
-                            walkingDistanceMins: int.tryParse(_campusWalkingDistanceController.text) ?? 10,
-                            eRickshawFare: int.tryParse(_campusRickshawFareController.text) ?? 10,
-                            avgPgRent: int.tryParse(_campusPgRentController.text) ?? 10000,
-                            safetyIndex: _campusSelectedSafety,
-                            description: _campusDescriptionController.text.trim(),
-                          );
+                                final newItem = CampusGuideItem(
+                                  id: id,
+                                  collegeName: college,
+                                  campusType: _campusSelectedType.toLowerCase(),
+                                  nearestMetro: _campusNearestMetroController
+                                      .text
+                                      .trim(),
+                                  metroLine: _campusSelectedLine,
+                                  walkingDistanceMins:
+                                      int.tryParse(
+                                        _campusWalkingDistanceController.text,
+                                      ) ??
+                                      10,
+                                  eRickshawFare:
+                                      int.tryParse(
+                                        _campusRickshawFareController.text,
+                                      ) ??
+                                      10,
+                                  avgPgRent:
+                                      int.tryParse(
+                                        _campusPgRentController.text,
+                                      ) ??
+                                      10000,
+                                  safetyIndex: _campusSelectedSafety,
+                                  description: _campusDescriptionController.text
+                                      .trim(),
+                                );
 
-                          final success = await Provider.of<DuCampusService>(context, listen: false)
-                              .addOrUpdateGuide(newItem);
+                                final success =
+                                    await Provider.of<DuCampusService>(
+                                      context,
+                                      listen: false,
+                                    ).addOrUpdateGuide(newItem);
 
-                          setState(() => _isPublishingCampusGuide = false);
+                                setState(
+                                  () => _isPublishingCampusGuide = false,
+                                );
 
-                          if (mounted) {
-                            _campusCollegeNameController.clear();
-                            _campusNearestMetroController.clear();
-                            _campusDescriptionController.clear();
+                                if (mounted) {
+                                  _campusCollegeNameController.clear();
+                                  _campusNearestMetroController.clear();
+                                  _campusDescriptionController.clear();
 
-                            ScaffoldMessenger.of(context).showSnackBar(
-                              SnackBar(
-                                content: Text(success 
-                                    ? 'Campus guide details published successfully!' 
-                                    : 'Updated locally (Supabase table connection skipped).'),
-                                backgroundColor: success ? Colors.green : Colors.orange,
-                                behavior: SnackBarBehavior.floating,
-                              ),
-                            );
-                          }
-                        },
+                                  ScaffoldMessenger.of(context).showSnackBar(
+                                    SnackBar(
+                                      content: Text(
+                                        success
+                                            ? 'Campus guide details published successfully!'
+                                            : 'Updated locally (Supabase table connection skipped).',
+                                      ),
+                                      backgroundColor: success
+                                          ? Colors.green
+                                          : Colors.orange,
+                                      behavior: SnackBarBehavior.floating,
+                                    ),
+                                  );
+                                }
+                              },
                         icon: _isPublishingCampusGuide
-                            ? const SizedBox(width: 20, height: 20, child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white))
+                            ? const SizedBox(
+                                width: 20,
+                                height: 20,
+                                child: CircularProgressIndicator(
+                                  strokeWidth: 2,
+                                  color: Colors.white,
+                                ),
+                              )
                             : const Icon(LucideIcons.plusCircle),
                         label: Text(
-                          _isPublishingCampusGuide ? 'Publishing...' : 'Publish Guide Card',
-                          style: GoogleFonts.outfit(fontWeight: FontWeight.bold),
+                          _isPublishingCampusGuide
+                              ? 'Publishing...'
+                              : 'Publish Guide Card',
+                          style: GoogleFonts.outfit(
+                            fontWeight: FontWeight.bold,
+                          ),
                         ),
                         style: ElevatedButton.styleFrom(
                           backgroundColor: theme.colorScheme.primary,
                           foregroundColor: Colors.white,
-                          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                          shape: RoundedRectangleBorder(
+                            borderRadius: BorderRadius.circular(12),
+                          ),
                         ),
                       ),
                     ),
@@ -2655,7 +2744,10 @@ class _AdminDashboardState extends State<AdminDashboard>
           // Active guides list
           Text(
             'Active Campus Guide Cards',
-            style: GoogleFonts.outfit(fontSize: 16, fontWeight: FontWeight.bold),
+            style: GoogleFonts.outfit(
+              fontSize: 16,
+              fontWeight: FontWeight.bold,
+            ),
           ),
           const SizedBox(height: 12),
 
@@ -2684,24 +2776,36 @@ class _AdminDashboardState extends State<AdminDashboard>
                               children: [
                                 Text(
                                   g.collegeName,
-                                  style: GoogleFonts.outfit(fontWeight: FontWeight.bold, fontSize: 13.5),
+                                  style: GoogleFonts.outfit(
+                                    fontWeight: FontWeight.bold,
+                                    fontSize: 13.5,
+                                  ),
                                 ),
                                 const SizedBox(height: 2),
                                 Text(
                                   'Metro: ${g.nearestMetro} (${g.metroLine} Line) | PG: ₹${g.avgPgRent}',
-                                  style: GoogleFonts.inter(fontSize: 11, color: Colors.grey),
+                                  style: GoogleFonts.inter(
+                                    fontSize: 11,
+                                    color: Colors.grey,
+                                  ),
                                 ),
                               ],
                             ),
                           ),
                           IconButton(
-                            icon: const Icon(LucideIcons.trash2, color: Colors.red, size: 18),
+                            icon: const Icon(
+                              LucideIcons.trash2,
+                              color: Colors.red,
+                              size: 18,
+                            ),
                             onPressed: () async {
                               showDialog(
                                 context: context,
                                 builder: (context) => AlertDialog(
                                   title: const Text('Delete Guide Card?'),
-                                  content: Text('Are you sure you want to permanently delete the campus guide for "${g.collegeName}"?'),
+                                  content: Text(
+                                    'Are you sure you want to permanently delete the campus guide for "${g.collegeName}"?',
+                                  ),
                                   actions: [
                                     TextButton(
                                       onPressed: () => Navigator.pop(context),
@@ -2710,9 +2814,15 @@ class _AdminDashboardState extends State<AdminDashboard>
                                     ElevatedButton(
                                       onPressed: () async {
                                         Navigator.pop(context);
-                                        await Provider.of<DuCampusService>(context, listen: false).deleteGuide(g.id);
+                                        await Provider.of<DuCampusService>(
+                                          context,
+                                          listen: false,
+                                        ).deleteGuide(g.id);
                                       },
-                                      style: ElevatedButton.styleFrom(backgroundColor: Colors.red, foregroundColor: Colors.white),
+                                      style: ElevatedButton.styleFrom(
+                                        backgroundColor: Colors.red,
+                                        foregroundColor: Colors.white,
+                                      ),
                                       child: const Text('Delete'),
                                     ),
                                   ],
@@ -2730,4 +2840,3 @@ class _AdminDashboardState extends State<AdminDashboard>
     );
   }
 }
-

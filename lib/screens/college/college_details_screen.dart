@@ -133,12 +133,14 @@ class _CollegeDetailsScreenState extends State<CollegeDetailsScreen> {
         IconButton(
           icon: const Icon(LucideIcons.share2, color: Colors.white),
           onPressed: () {
+            final shareUrl = 'https://cuet.collegemitra.net.in/college?name=${Uri.encodeComponent(college.name)}';
+            final appUrl = 'cuet://college?name=${Uri.encodeComponent(college.name)}';
             final String text = 'Check out ${college.name} on Cuet Predictor!\n\n'
                 '📍 Campus: ${college.campus}\n'
                 '🏆 NIRF Rank: #${college.nirfRanking}\n'
                 '🎓 Courses: ${college.courses.map((c) => c.courseName).take(3).join(", ")}...\n\n'
-                'Open in App: cuet://college/${college.id}\n'
-                'Or view on Web: https://cuet.collegemitra.net.in/college/${college.id}';
+                'Open in App: $appUrl\n'
+                'Or view on Web: $shareUrl';
             Share.share(text);
           },
         ),
