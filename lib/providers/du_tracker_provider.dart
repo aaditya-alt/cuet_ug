@@ -3,180 +3,219 @@ import 'package:flutter/foundation.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 
+// ─────────────────────────────────────────────────────────────────────────────
+// MODEL
+// ─────────────────────────────────────────────────────────────────────────────
+class CsasTimelineEvent {
+  final int id;
+  final String title;
+  final String eventDate; // stored as text e.g. "2026-06-15"
+  final String? eventTime; // e.g. "23:59"
+  final String? description;
+  final bool isCompleted;
+  final int sortOrder;
+  final String category; // "Phase 1" / "Phase 2" / "Phase 3" / "General"
+  final String iconName;
+  final bool isImportant;
+  final String? linkUrl;
+  final String? linkLabel;
+  final bool isActive;
+
+  CsasTimelineEvent({
+    required this.id,
+    required this.title,
+    required this.eventDate,
+    this.eventTime,
+    this.description,
+    required this.isCompleted,
+    required this.sortOrder,
+    required this.category,
+    required this.iconName,
+    required this.isImportant,
+    this.linkUrl,
+    this.linkLabel,
+    required this.isActive,
+  });
+
+  factory CsasTimelineEvent.fromJson(Map<String, dynamic> j) {
+    return CsasTimelineEvent(
+      id: j['id'] as int,
+      title: j['title'] as String? ?? '',
+      eventDate: j['event_date'] as String? ?? '',
+      eventTime: j['event_time'] as String?,
+      description: j['description'] as String?,
+      isCompleted: j['is_completed'] as bool? ?? false,
+      sortOrder: j['sort_order'] as int? ?? 0,
+      category: j['category'] as String? ?? 'General',
+      iconName: j['icon_name'] as String? ?? 'calendar',
+      isImportant: j['is_important'] as bool? ?? false,
+      linkUrl: j['link_url'] as String?,
+      linkLabel: j['link_label'] as String?,
+      isActive: j['is_active'] as bool? ?? true,
+    );
+  }
+
+  /// Parses event_date + event_time into a DateTime.
+  /// Falls back gracefully if format is unexpected.
+  DateTime get dateTime {
+    try {
+      final datePart = eventDate.trim();
+      final timePart = (eventTime?.trim().isNotEmpty == true)
+          ? eventTime!.trim()
+          : '23:59:59';
+      return DateTime.parse('$datePart $timePart');
+    } catch (_) {
+      return DateTime(2099); // push unknown dates to the end
+    }
+  }
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// PROVIDER
+// ─────────────────────────────────────────────────────────────────────────────
 class DuTrackerProvider extends ChangeNotifier {
   final SharedPreferences _prefs;
   final SupabaseClient _client = Supabase.instance.client;
 
-  // Active ticking timer for real-time countdown updates
   Timer? _countdownTimer;
 
-  // Checklist items by Phase
-  final Map<String, List<String>> _phaseTasks = {
-    'phase1': [
-      'Fill personal & category details accurately',
-      'Upload Class XII Marksheet (Digilocker verified)',
-      'Confirm Board subject maps to CUET subjects',
-      'Pay CSAS Phase 1 registration fee online',
-    ],
-    'phase2': [
-      'Verify programmatic eligibility scoring metrics',
-      'Generate optimized college-course preference sheet',
-      'Select and rank a minimum of 30 colleges',
-      'Lock preference priorities list before deadline',
-    ],
-    'phase3': [
-      'Check Round 1 allocation notifications',
-      'Accept allocated seat (must complete in 24 hours)',
-      'Verify document status with the college admin',
-      'Complete online college admission fee payment',
-    ],
-  };
+  // All active events from csas_timeline
+  List<CsasTimelineEvent> _events = [];
+  bool isLoading = true;
+  String? loadError;
 
-  // User persistent checklist marked states (task_key -> checked)
+  // Per-task local checkbox states (keyed by event id)
   final Map<String, bool> _taskStates = {};
 
-  // Phase milestones target deadlines
-  DateTime _phase1Deadline = DateTime(2026, 6, 15, 23, 59, 59);
-  DateTime _phase2Deadline = DateTime(2026, 7, 5, 23, 59, 59);
-  DateTime _phase3Deadline = DateTime(2026, 7, 20, 23, 59, 59);
-
   DuTrackerProvider(this._prefs) {
-    _loadChecklistStates();
-    _fetchDeadlinesFromDb();
+    _loadLocalTaskStates();
+    fetchTimeline();
     _startCountdownTicker();
   }
 
-  Map<String, List<String>> get phaseTasks => _phaseTasks;
+  // ── Public getters ─────────────────────────────────────────────────────────
+
+  List<CsasTimelineEvent> get allEvents => _events;
   Map<String, bool> get taskStates => _taskStates;
 
-  DateTime get phase1Deadline => _phase1Deadline;
-  DateTime get phase2Deadline => _phase2Deadline;
-  DateTime get phase3Deadline => _phase3Deadline;
+  /// Events grouped by category, only active ones, sorted by sort_order.
+  Map<String, List<CsasTimelineEvent>> get eventsByCategory {
+    final Map<String, List<CsasTimelineEvent>> map = {};
+    for (final e in _events.where((e) => e.isActive)) {
+      map.putIfAbsent(e.category, () => []).add(e);
+    }
+    // Sort each category's list by sort_order
+    for (final list in map.values) {
+      list.sort((a, b) => a.sortOrder.compareTo(b.sortOrder));
+    }
+    return map;
+  }
 
-  // Load checklist checkmarks from disk cache
-  void _loadChecklistStates() {
-    for (final phase in _phaseTasks.keys) {
-      final tasks = _phaseTasks[phase]!;
-      for (final task in tasks) {
-        final key = _getTaskKey(phase, task);
-        _taskStates[key] = _prefs.getBool(key) ?? false;
+  /// Sorted list of unique categories in sort_order sequence.
+  List<String> get categories {
+    final seen = <String>{};
+    return _events
+        .where((e) => e.isActive)
+        .map((e) => e.category)
+        .where(seen.add)
+        .toList();
+  }
+
+  // ── Phase deadline helpers ─────────────────────────────────────────────────
+  // These find the latest event_date in each Phase category as the deadline.
+
+  DateTime _latestDateForCategory(String cat) {
+    final evs = eventsByCategory[cat] ?? [];
+    if (evs.isEmpty) return DateTime(2099);
+    return evs.map((e) => e.dateTime).reduce((a, b) => a.isAfter(b) ? a : b);
+  }
+
+  DateTime get phase1Deadline => _latestDateForCategory('Phase 1');
+  DateTime get phase2Deadline => _latestDateForCategory('Phase 2');
+  DateTime get phase3Deadline => _latestDateForCategory('Phase 3');
+
+  // ── Checklist helpers ──────────────────────────────────────────────────────
+
+  String _taskKey(int eventId) => 'csas_task_event_$eventId';
+
+  void _loadLocalTaskStates() {
+    final keys = _prefs.getKeys();
+    for (final k in keys) {
+      if (k.startsWith('csas_task_event_')) {
+        _taskStates[k] = _prefs.getBool(k) ?? false;
       }
     }
+  }
+
+  Future<void> toggleTask(int eventId) async {
+    final key = _taskKey(eventId);
+    final current = _taskStates[key] ?? false;
+    _taskStates[key] = !current;
+    await _prefs.setBool(key, !current);
     notifyListeners();
   }
 
-  // Generate unique storage identifier
-  String _getTaskKey(String phase, String task) {
-    return 'csas_task_${phase}_${task.replaceAll(' ', '_')}';
+  bool isTaskChecked(int eventId) => _taskStates[_taskKey(eventId)] ?? false;
+
+  /// Progress 0.0–1.0 for a given category based on local checkbox states.
+  double getPhaseProgress(String category) {
+    final evs = (eventsByCategory[category] ?? []);
+    if (evs.isEmpty) return 0.0;
+    final checked = evs.where((e) => isTaskChecked(e.id)).length;
+    return checked / evs.length;
   }
 
-  // Toggle check state persistently
-  Future<void> toggleTask(String phase, String task) async {
-    final key = _getTaskKey(phase, task);
-    final currentState = _taskStates[key] ?? false;
-    final newState = !currentState;
-    
-    _taskStates[key] = newState;
-    await _prefs.setBool(key, newState);
+  // ── Data fetch ─────────────────────────────────────────────────────────────
+
+  Future<void> fetchTimeline() async {
+    isLoading = true;
+    loadError = null;
     notifyListeners();
-  }
 
-  // Calculate percentage completion of a phase
-  double getPhaseProgress(String phase) {
-    final tasks = _phaseTasks[phase] ?? [];
-    if (tasks.isEmpty) return 0.0;
-    
-    int checkedCount = 0;
-    for (final task in tasks) {
-      final key = _getTaskKey(phase, task);
-      if (_taskStates[key] == true) {
-        checkedCount++;
-      }
-    }
-    return checkedCount / tasks.length;
-  }
-
-  // Pull timeline updates dynamically from DB
-  Future<void> _fetchDeadlinesFromDb() async {
     try {
-      final response = await _client
-          .from('du_timeline_deadlines')
+      final res = await _client
+          .from('csas_timeline')
           .select()
-          .maybeSingle();
+          .eq('is_active', true)
+          .order('sort_order')
+          .order('event_date');
 
-      if (response != null && response is Map) {
-        if (response['phase1_deadline'] != null) {
-          _phase1Deadline = DateTime.parse(response['phase1_deadline'].toString());
-        }
-        if (response['phase2_deadline'] != null) {
-          _phase2Deadline = DateTime.parse(response['phase2_deadline'].toString());
-        }
-        if (response['phase3_deadline'] != null) {
-          _phase3Deadline = DateTime.parse(response['phase3_deadline'].toString());
-        }
-        notifyListeners();
-      }
+      _events = (res as List)
+          .map((r) => CsasTimelineEvent.fromJson(r))
+          .toList();
     } catch (e) {
-      debugPrint('Dynamic deadlines load error (using default schedules): $e');
+      loadError = 'Could not load timeline: $e';
+      debugPrint('fetchTimeline error: $e');
     }
-  }
 
-  // Set deadlines locally and trigger database backup (called by Admin Dashboard!)
-  Future<bool> updateDeadlines({
-    required DateTime p1,
-    required DateTime p2,
-    required DateTime p3,
-  }) async {
-    _phase1Deadline = p1;
-    _phase2Deadline = p2;
-    _phase3Deadline = p3;
+    isLoading = false;
     notifyListeners();
-
-    try {
-      // Upsert to timeline deadlines configuration table
-      await _client.from('du_timeline_deadlines').upsert({
-        'id': 'singleton_timeline',
-        'phase1_deadline': p1.toIso8601String(),
-        'phase2_deadline': p2.toIso8601String(),
-        'phase3_deadline': p3.toIso8601String(),
-      });
-      return true;
-    } catch (e) {
-      debugPrint('Failed to save configuration deadlines to Supabase (locally applied): $e');
-      return false;
-    }
   }
 
-  // Dynamic ticking calculations
+  // ── Countdown ──────────────────────────────────────────────────────────────
+
   void _startCountdownTicker() {
     _countdownTimer?.cancel();
-    _countdownTimer = Timer.periodic(const Duration(seconds: 1), (timer) {
+    _countdownTimer = Timer.periodic(const Duration(seconds: 1), (_) {
       notifyListeners();
     });
   }
 
-  // Formatted countdown strings
   String getCountdownString(DateTime deadline) {
-    final now = DateTime.now();
-    final difference = deadline.difference(now);
-
-    if (difference.isNegative) {
-      return 'Completed / Closed';
-    }
-
-    final days = difference.inDays;
-    final hours = difference.inHours % 24;
-    final minutes = difference.inMinutes % 60;
-    final seconds = difference.inSeconds % 60;
-
-    if (days > 0) {
-      return '$days d, $hours hrs left';
-    } else if (hours > 0) {
-      return '$hours hrs, $minutes mins left';
-    } else {
-      return '$minutes mins, $seconds secs left';
-    }
+    final diff = deadline.difference(DateTime.now());
+    if (diff.isNegative) return 'Completed / Closed';
+    final d = diff.inDays;
+    final h = diff.inHours % 24;
+    final m = diff.inMinutes % 60;
+    final s = diff.inSeconds % 60;
+    if (d > 0) return '$d d $h hrs left';
+    if (h > 0) return '$h hrs $m mins left';
+    return '$m mins $s secs left';
   }
+
+  /// Countdown to a specific event's own deadline.
+  String getEventCountdown(CsasTimelineEvent event) =>
+      getCountdownString(event.dateTime);
 
   @override
   void dispose() {

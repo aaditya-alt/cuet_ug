@@ -49,9 +49,13 @@ class _DuInputScreenState extends State<DuInputScreen> {
     'B.Voc.',
     'B.El.Ed.',
     'BFA',
-    'Other'
+    'Other',
   ];
   final int _selectedYear = 2025;
+  // Add this field with the other controllers:
+  final TextEditingController _gatScoreController = TextEditingController();
+
+  // In dispose():
 
   @override
   void initState() {
@@ -62,6 +66,7 @@ class _DuInputScreenState extends State<DuInputScreen> {
   @override
   void dispose() {
     _pageController.dispose();
+    _gatScoreController.dispose();
     for (var controller in _scoreControllers.values) {
       controller.dispose();
     }
@@ -71,15 +76,17 @@ class _DuInputScreenState extends State<DuInputScreen> {
   Future<void> _fetchSubjectLists() async {
     try {
       final res = await _client.from('cuet_subject_lists').select();
-      final List<Map<String, dynamic>> list = List<Map<String, dynamic>>.from(res);
-      
+      final List<Map<String, dynamic>> list = List<Map<String, dynamic>>.from(
+        res,
+      );
+
       final Set<String> langs = {};
       final Set<String> domains = {};
-      
+
       for (final row in list) {
         final listName = row['list_name'] as String;
         final subjectName = row['subject'] as String;
-        
+
         if (listName.toUpperCase() == 'A') {
           langs.add(subjectName);
         } else {
@@ -114,16 +121,35 @@ class _DuInputScreenState extends State<DuInputScreen> {
       // Validate Step 2 before proceeding
       if (_selectedLanguages.isEmpty || _selectedLanguages.length > 2) {
         ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('Please select 1 or 2 Language subjects from List A.')),
+          const SnackBar(
+            content: Text(
+              'Please select 1 or 2 Language subjects from List A.',
+            ),
+          ),
         );
         return;
       }
 
       if (_selectedDomains.isEmpty || _selectedDomains.length > 4) {
         ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('Please select 1 to 4 Domain subjects from List B.')),
+          const SnackBar(
+            content: Text('Please select 1 to 4 Domain subjects from List B.'),
+          ),
         );
         return;
+      }
+
+      if (_studentHasGat) {
+        final gatText = _gatScoreController.text;
+        final gatVal = double.tryParse(gatText);
+        if (gatVal == null || gatVal < 0 || gatVal > 250) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(
+              content: Text('Please enter a valid GAT score (0-250).'),
+            ),
+          );
+          return;
+        }
       }
 
       // Check if all selected subjects have valid scores
@@ -139,7 +165,11 @@ class _DuInputScreenState extends State<DuInputScreen> {
 
       if (hasInvalidScore) {
         ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('Please enter a valid score (0-250) for all selected subjects.')),
+          const SnackBar(
+            content: Text(
+              'Please enter a valid score (0-250) for all selected subjects.',
+            ),
+          ),
         );
         return;
       }
@@ -184,6 +214,9 @@ class _DuInputScreenState extends State<DuInputScreen> {
         langScores: langScores,
         domainScores: domainScores,
         studentHasGat: _studentHasGat,
+        gatScore: _studentHasGat
+            ? double.tryParse(_gatScoreController.text)
+            : null,
         studentCategory: _selectedCategory,
         studentGender: _selectedGender,
         preferredDegree: _selectedPreferredDegree,
@@ -232,15 +265,22 @@ class _DuInputScreenState extends State<DuInputScreen> {
           preferredSize: const Size.fromHeight(4.0),
           child: LinearProgressIndicator(
             value: (_currentStep + 1) / 3,
-            backgroundColor: isDark ? Colors.grey.shade800 : Colors.grey.shade200,
-            valueColor: AlwaysStoppedAnimation<Color>(theme.colorScheme.primary),
+            backgroundColor: isDark
+                ? Colors.grey.shade800
+                : Colors.grey.shade200,
+            valueColor: AlwaysStoppedAnimation<Color>(
+              theme.colorScheme.primary,
+            ),
           ),
         ),
       ),
       body: Column(
         children: [
           Padding(
-            padding: const EdgeInsets.symmetric(vertical: 16.0, horizontal: 20.0),
+            padding: const EdgeInsets.symmetric(
+              vertical: 16.0,
+              horizontal: 20.0,
+            ),
             child: Row(
               mainAxisAlignment: MainAxisAlignment.spaceBetween,
               children: [
@@ -252,7 +292,11 @@ class _DuInputScreenState extends State<DuInputScreen> {
                   ),
                 ),
                 Text(
-                  _currentStep == 0 ? 'Basic Details' : _currentStep == 1 ? 'Subjects & Scores' : 'Preferences',
+                  _currentStep == 0
+                      ? 'Basic Details'
+                      : _currentStep == 1
+                      ? 'Subjects & Scores'
+                      : 'Preferences',
                   style: GoogleFonts.outfit(
                     color: isDark ? Colors.grey.shade400 : Colors.grey.shade600,
                     fontWeight: FontWeight.w500,
@@ -286,7 +330,10 @@ class _DuInputScreenState extends State<DuInputScreen> {
         children: [
           Text(
             'Tell us about yourself',
-            style: GoogleFonts.outfit(fontSize: 24, fontWeight: FontWeight.bold),
+            style: GoogleFonts.outfit(
+              fontSize: 24,
+              fontWeight: FontWeight.bold,
+            ),
           ),
           const SizedBox(height: 8),
           Text(
@@ -352,7 +399,10 @@ class _DuInputScreenState extends State<DuInputScreen> {
         children: [
           Text(
             'Your CUET Performance',
-            style: GoogleFonts.outfit(fontSize: 24, fontWeight: FontWeight.bold),
+            style: GoogleFonts.outfit(
+              fontSize: 24,
+              fontWeight: FontWeight.bold,
+            ),
           ),
           const SizedBox(height: 8),
           Text(
@@ -365,19 +415,27 @@ class _DuInputScreenState extends State<DuInputScreen> {
             decoration: BoxDecoration(
               color: theme.colorScheme.primary.withOpacity(0.1),
               borderRadius: BorderRadius.circular(12),
-              border: Border.all(color: theme.colorScheme.primary.withOpacity(0.2)),
+              border: Border.all(
+                color: theme.colorScheme.primary.withOpacity(0.2),
+              ),
             ),
             child: Row(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Icon(LucideIcons.info, color: theme.colorScheme.primary, size: 20),
+                Icon(
+                  LucideIcons.info,
+                  color: theme.colorScheme.primary,
+                  size: 20,
+                ),
                 const SizedBox(width: 12),
                 Expanded(
                   child: Text(
                     'For B.Sc. Science programs (like Chemistry, Botany), your language score is NOT counted in merit. We handle all DU scoring rules automatically!',
                     style: GoogleFonts.outfit(
                       fontSize: 13,
-                      color: isDark ? Colors.blue.shade200 : Colors.blue.shade900,
+                      color: isDark
+                          ? Colors.blue.shade200
+                          : Colors.blue.shade900,
                     ),
                   ),
                 ),
@@ -389,7 +447,10 @@ class _DuInputScreenState extends State<DuInputScreen> {
           // ── Languages Appeared (List A) ──
           Text(
             'Languages (List A) - Select 1 or 2',
-            style: GoogleFonts.outfit(fontSize: 16, fontWeight: FontWeight.bold),
+            style: GoogleFonts.outfit(
+              fontSize: 16,
+              fontWeight: FontWeight.bold,
+            ),
           ),
           const SizedBox(height: 12),
           Wrap(
@@ -407,7 +468,11 @@ class _DuInputScreenState extends State<DuInputScreen> {
                         _selectedLanguages.add(subject);
                       } else {
                         ScaffoldMessenger.of(context).showSnackBar(
-                          const SnackBar(content: Text('You can select a maximum of 2 languages.')),
+                          const SnackBar(
+                            content: Text(
+                              'You can select a maximum of 2 languages.',
+                            ),
+                          ),
                         );
                       }
                     } else {
@@ -420,14 +485,19 @@ class _DuInputScreenState extends State<DuInputScreen> {
           ),
           if (_selectedLanguages.isNotEmpty) ...[
             const SizedBox(height: 16),
-            ..._selectedLanguages.map((lang) => _buildScoreInput(lang, isDark, theme)).toList(),
+            ..._selectedLanguages
+                .map((lang) => _buildScoreInput(lang, isDark, theme))
+                .toList(),
           ],
           const SizedBox(height: 32),
 
           // ── Domains Appeared (List B) ──
           Text(
             'Domain Subjects (List B) - Select 1 to 4',
-            style: GoogleFonts.outfit(fontSize: 16, fontWeight: FontWeight.bold),
+            style: GoogleFonts.outfit(
+              fontSize: 16,
+              fontWeight: FontWeight.bold,
+            ),
           ),
           const SizedBox(height: 12),
           Wrap(
@@ -445,7 +515,11 @@ class _DuInputScreenState extends State<DuInputScreen> {
                         _selectedDomains.add(subject);
                       } else {
                         ScaffoldMessenger.of(context).showSnackBar(
-                          const SnackBar(content: Text('You can select a maximum of 4 domain subjects.')),
+                          const SnackBar(
+                            content: Text(
+                              'You can select a maximum of 4 domain subjects.',
+                            ),
+                          ),
                         );
                       }
                     } else {
@@ -458,31 +532,131 @@ class _DuInputScreenState extends State<DuInputScreen> {
           ),
           if (_selectedDomains.isNotEmpty) ...[
             const SizedBox(height: 16),
-            ..._selectedDomains.map((domain) => _buildScoreInput(domain, isDark, theme)).toList(),
+            ..._selectedDomains
+                .map((domain) => _buildScoreInput(domain, isDark, theme))
+                .toList(),
           ],
           const SizedBox(height: 32),
 
           // ── General Aptitude Test Toggle ──
           Container(
-            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+            padding: const EdgeInsets.all(16),
             decoration: BoxDecoration(
               color: isDark ? Colors.grey.shade900 : Colors.grey.shade50,
               borderRadius: BorderRadius.circular(16),
-              border: Border.all(color: isDark ? Colors.grey.shade800 : Colors.grey.shade200),
+              border: Border.all(
+                color: isDark ? Colors.grey.shade800 : Colors.grey.shade200,
+              ),
             ),
-            child: SwitchListTile(
-              title: Text(
-                'General Aptitude Test (GAT)',
-                style: GoogleFonts.outfit(fontWeight: FontWeight.bold, fontSize: 15),
-              ),
-              subtitle: Text(
-                'Did you appear for the GAT?',
-                style: GoogleFonts.outfit(fontSize: 12),
-              ),
-              value: _studentHasGat,
-              activeColor: theme.colorScheme.primary,
-              onChanged: (v) => setState(() => _studentHasGat = v),
-              contentPadding: EdgeInsets.zero,
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                SwitchListTile(
+                  title: Text(
+                    'General Aptitude Test (GAT)',
+                    style: GoogleFonts.outfit(
+                      fontWeight: FontWeight.bold,
+                      fontSize: 15,
+                    ),
+                  ),
+                  subtitle: Text(
+                    'Did you appear for the GAT section in CUET?',
+                    style: GoogleFonts.outfit(fontSize: 12, color: Colors.grey),
+                  ),
+                  value: _studentHasGat,
+                  activeColor: theme.colorScheme.primary,
+                  onChanged: (v) => setState(() => _studentHasGat = v),
+                  contentPadding: EdgeInsets.zero,
+                ),
+                if (_studentHasGat) ...[
+                  const SizedBox(height: 12),
+                  Row(
+                    children: [
+                      Expanded(
+                        flex: 2,
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Text(
+                              'GAT Score',
+                              style: GoogleFonts.outfit(
+                                fontWeight: FontWeight.w600,
+                                fontSize: 14,
+                              ),
+                            ),
+                            Text(
+                              'Enter your NTA normalised score (0-250)',
+                              style: GoogleFonts.outfit(
+                                fontSize: 11,
+                                color: Colors.grey,
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                      const SizedBox(width: 16),
+                      Expanded(
+                        flex: 1,
+                        child: TextFormField(
+                          controller: _gatScoreController,
+                          keyboardType: const TextInputType.numberWithOptions(
+                            decimal: true,
+                          ),
+                          textAlign: TextAlign.center,
+                          decoration: InputDecoration(
+                            hintText: 'Max 250',
+                            hintStyle: const TextStyle(fontSize: 12),
+                            contentPadding: const EdgeInsets.symmetric(
+                              vertical: 12,
+                              horizontal: 8,
+                            ),
+                            border: OutlineInputBorder(
+                              borderRadius: BorderRadius.circular(8),
+                            ),
+                            focusedBorder: OutlineInputBorder(
+                              borderRadius: BorderRadius.circular(8),
+                              borderSide: BorderSide(
+                                color: theme.colorScheme.primary,
+                                width: 2,
+                              ),
+                            ),
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 8),
+                  Container(
+                    padding: const EdgeInsets.all(10),
+                    decoration: BoxDecoration(
+                      color: Colors.amber.withOpacity(0.1),
+                      borderRadius: BorderRadius.circular(8),
+                    ),
+                    child: Row(
+                      children: [
+                        const Icon(
+                          LucideIcons.info,
+                          size: 14,
+                          color: Colors.amber,
+                        ),
+                        const SizedBox(width: 8),
+                        Expanded(
+                          child: Text(
+                            'GAT score is used for B.Tech IT&MI, BMS, BBA-FIA, BBE, '
+                            'B.A. Multimedia, B.Com, B.Voc, and B.A. Programme '
+                            '(GAT combo). DU uses proration so these are comparable '
+                            'to standard 1000-mark programmes.',
+                            style: GoogleFonts.outfit(
+                              fontSize: 11,
+                              color: Colors.amber.shade900,
+                            ),
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                ],
+              ],
             ),
           ),
         ],
@@ -498,7 +672,10 @@ class _DuInputScreenState extends State<DuInputScreen> {
         children: [
           Text(
             'Your Preferences',
-            style: GoogleFonts.outfit(fontSize: 24, fontWeight: FontWeight.bold),
+            style: GoogleFonts.outfit(
+              fontSize: 24,
+              fontWeight: FontWeight.bold,
+            ),
           ),
           const SizedBox(height: 8),
           Text(
@@ -525,7 +702,10 @@ class _DuInputScreenState extends State<DuInputScreen> {
           Center(
             child: Text(
               'All Set!',
-              style: GoogleFonts.outfit(fontSize: 24, fontWeight: FontWeight.bold),
+              style: GoogleFonts.outfit(
+                fontSize: 24,
+                fontWeight: FontWeight.bold,
+              ),
             ),
           ),
           const SizedBox(height: 8),
@@ -549,7 +729,10 @@ class _DuInputScreenState extends State<DuInputScreen> {
             flex: 2,
             child: Text(
               subject,
-              style: GoogleFonts.outfit(fontSize: 14, fontWeight: FontWeight.w500),
+              style: GoogleFonts.outfit(
+                fontSize: 14,
+                fontWeight: FontWeight.w500,
+              ),
               maxLines: 2,
               overflow: TextOverflow.ellipsis,
             ),
@@ -559,18 +742,26 @@ class _DuInputScreenState extends State<DuInputScreen> {
             flex: 1,
             child: TextFormField(
               controller: _getScoreController(subject),
-              keyboardType: const TextInputType.numberWithOptions(decimal: true),
+              keyboardType: const TextInputType.numberWithOptions(
+                decimal: true,
+              ),
               textAlign: TextAlign.center,
               decoration: InputDecoration(
                 hintText: 'Max 250',
                 hintStyle: const TextStyle(fontSize: 12),
-                contentPadding: const EdgeInsets.symmetric(vertical: 12, horizontal: 8),
+                contentPadding: const EdgeInsets.symmetric(
+                  vertical: 12,
+                  horizontal: 8,
+                ),
                 border: OutlineInputBorder(
                   borderRadius: BorderRadius.circular(8),
                 ),
                 focusedBorder: OutlineInputBorder(
                   borderRadius: BorderRadius.circular(8),
-                  borderSide: BorderSide(color: theme.colorScheme.primary, width: 2),
+                  borderSide: BorderSide(
+                    color: theme.colorScheme.primary,
+                    width: 2,
+                  ),
                 ),
               ),
               validator: (v) {
@@ -598,13 +789,19 @@ class _DuInputScreenState extends State<DuInputScreen> {
       children: [
         Text(
           label,
-          style: GoogleFonts.outfit(fontSize: 12, color: Colors.grey.shade600, fontWeight: FontWeight.w600),
+          style: GoogleFonts.outfit(
+            fontSize: 12,
+            color: Colors.grey.shade600,
+            fontWeight: FontWeight.w600,
+          ),
         ),
         const SizedBox(height: 6),
         Container(
           padding: const EdgeInsets.symmetric(horizontal: 12),
           decoration: BoxDecoration(
-            color: Theme.of(context).inputDecorationTheme.fillColor ?? Colors.grey.shade50,
+            color:
+                Theme.of(context).inputDecorationTheme.fillColor ??
+                Colors.grey.shade50,
             borderRadius: BorderRadius.circular(14),
             border: Border.all(color: Colors.grey.shade300),
           ),
@@ -658,7 +855,9 @@ class _DuInputScreenState extends State<DuInputScreen> {
                 onPressed: _prevStep,
                 style: OutlinedButton.styleFrom(
                   padding: const EdgeInsets.symmetric(vertical: 16),
-                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(12),
+                  ),
                 ),
                 child: const Text('Back'),
               ),
@@ -670,17 +869,25 @@ class _DuInputScreenState extends State<DuInputScreen> {
               onPressed: _isPredicting ? null : _nextStep,
               style: ElevatedButton.styleFrom(
                 padding: const EdgeInsets.symmetric(vertical: 16),
-                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(12),
+                ),
               ),
               child: _isPredicting
                   ? const SizedBox(
                       width: 24,
                       height: 24,
-                      child: CircularProgressIndicator(color: Colors.white, strokeWidth: 2),
+                      child: CircularProgressIndicator(
+                        color: Colors.white,
+                        strokeWidth: 2,
+                      ),
                     )
                   : Text(
                       _currentStep == 2 ? 'Find My Colleges' : 'Continue',
-                      style: GoogleFonts.outfit(fontSize: 16, fontWeight: FontWeight.bold),
+                      style: GoogleFonts.outfit(
+                        fontSize: 16,
+                        fontWeight: FontWeight.bold,
+                      ),
                     ),
             ),
           ),
