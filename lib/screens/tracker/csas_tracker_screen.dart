@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:lucide_icons/lucide_icons.dart';
 import 'package:provider/provider.dart';
+import 'package:url_launcher/url_launcher.dart';
 import '../../providers/du_tracker_provider.dart';
 
 class CsasTrackerScreen extends StatefulWidget {
@@ -11,19 +12,87 @@ class CsasTrackerScreen extends StatefulWidget {
   State<CsasTrackerScreen> createState() => _CsasTrackerScreenState();
 }
 
-class _CsasTrackerScreenState extends State<CsasTrackerScreen> with SingleTickerProviderStateMixin {
-  late TabController _tabController;
+class _CsasTrackerScreenState extends State<CsasTrackerScreen>
+    with SingleTickerProviderStateMixin {
+  TabController? _tabController;
+  List<String> _lastCategories = [];
 
-  @override
-  void initState() {
-    super.initState();
-    _tabController = TabController(length: 3, vsync: this);
+  // ── Icon mapper ────────────────────────────────────────────────────────────
+  IconData _iconFor(String name) {
+    switch (name.toLowerCase()) {
+      case 'calendar':
+        return LucideIcons.calendar;
+      case 'check':
+        return LucideIcons.checkCircle2;
+      case 'file':
+        return LucideIcons.fileText;
+      case 'upload':
+        return LucideIcons.upload;
+      case 'payment':
+      case 'money':
+        return LucideIcons.banknote;
+      case 'lock':
+        return LucideIcons.lock;
+      case 'seat':
+        return LucideIcons.mapPin;
+      case 'document':
+        return LucideIcons.clipboardList;
+      case 'alert':
+        return LucideIcons.alertCircle;
+      case 'link':
+        return LucideIcons.externalLink;
+      case 'star':
+        return LucideIcons.star;
+      case 'info':
+        return LucideIcons.info;
+      case 'registration':
+        return LucideIcons.userPlus;
+      case 'preference':
+        return LucideIcons.listOrdered;
+      case 'allocation':
+        return LucideIcons.award;
+      default:
+        return LucideIcons.calendar;
+    }
+  }
+
+  // ── Category colour ────────────────────────────────────────────────────────
+  Color _colorFor(String category) {
+    switch (category.toLowerCase()) {
+      case 'phase 1':
+        return const Color(0xFF6366F1);
+      case 'phase 2':
+        return const Color(0xFF10B981);
+      case 'phase 3':
+        return const Color(0xFFEC4899);
+      case 'general':
+        return const Color(0xFFF59E0B);
+      default:
+        // deterministic colour from string hash
+        final hue = (category.hashCode.abs() % 360).toDouble();
+        return HSLColor.fromAHSL(1, hue, 0.6, 0.5).toColor();
+    }
+  }
+
+  void _syncTabController(List<String> cats, TickerProvider vsync) {
+    if (_tabController == null || cats.length != _lastCategories.length) {
+      _tabController?.dispose();
+      _tabController = TabController(length: cats.length, vsync: vsync);
+      _lastCategories = List.of(cats);
+    }
   }
 
   @override
   void dispose() {
-    _tabController.dispose();
+    _tabController?.dispose();
     super.dispose();
+  }
+
+  // ── Launch URL ─────────────────────────────────────────────────────────────
+  Future<void> _launch(String url) async {
+    final uri = Uri.tryParse(url);
+    if (uri == null) return;
+    if (await canLaunchUrl(uri)) await launchUrl(uri);
   }
 
   @override
@@ -32,282 +101,656 @@ class _CsasTrackerScreenState extends State<CsasTrackerScreen> with SingleTicker
     final isDark = theme.brightness == Brightness.dark;
     final tracker = Provider.of<DuTrackerProvider>(context);
 
-    // Dynamic phase details mapping
-    final List<Map<String, dynamic>> phases = [
-      {
-        'id': 'phase1',
-        'title': 'Phase 1: Registration',
-        'subtitle': 'Personal profile details & document verification uploads.',
-        'deadline': tracker.phase1Deadline,
-        'color': const Color(0xFF6366F1),
-      },
-      {
-        'id': 'phase2',
-        'title': 'Phase 2: Preferences',
-        'subtitle': 'Course and college selection alignment lists locking.',
-        'deadline': tracker.phase2Deadline,
-        'color': const Color(0xFF10B981),
-      },
-      {
-        'id': 'phase3',
-        'title': 'Phase 3: Seat Allocations',
-        'subtitle': 'Rounds seat acceptances, fee payments, upgrades/freezes.',
-        'deadline': tracker.phase3Deadline,
-        'color': const Color(0xFFEC4899),
-      },
-    ];
+    // ── Loading ──────────────────────────────────────────────────────────────
+    if (tracker.isLoading) {
+      return Scaffold(
+        backgroundColor: isDark
+            ? const Color(0xFF0A0E14)
+            : const Color(0xFFF8F9FF),
+        appBar: AppBar(
+          title: Text(
+            'CSAS Tracker',
+            style: GoogleFonts.outfit(fontWeight: FontWeight.bold),
+          ),
+        ),
+        body: const Center(child: CircularProgressIndicator()),
+      );
+    }
+
+    // ── Error ────────────────────────────────────────────────────────────────
+    if (tracker.loadError != null && tracker.allEvents.isEmpty) {
+      return Scaffold(
+        backgroundColor: isDark
+            ? const Color(0xFF0A0E14)
+            : const Color(0xFFF8F9FF),
+        appBar: AppBar(
+          title: Text(
+            'CSAS Tracker',
+            style: GoogleFonts.outfit(fontWeight: FontWeight.bold),
+          ),
+        ),
+        body: Center(
+          child: Padding(
+            padding: const EdgeInsets.all(32),
+            child: Column(
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: [
+                const Icon(
+                  LucideIcons.wifiOff,
+                  size: 48,
+                  color: Colors.redAccent,
+                ),
+                const SizedBox(height: 16),
+                Text(
+                  tracker.loadError!,
+                  textAlign: TextAlign.center,
+                  style: GoogleFonts.outfit(color: Colors.grey),
+                ),
+                const SizedBox(height: 20),
+                ElevatedButton.icon(
+                  onPressed: tracker.fetchTimeline,
+                  icon: const Icon(LucideIcons.refreshCw, size: 16),
+                  label: const Text('Retry'),
+                ),
+              ],
+            ),
+          ),
+        ),
+      );
+    }
+
+    final cats = tracker.categories;
+
+    // ── Empty ────────────────────────────────────────────────────────────────
+    if (cats.isEmpty) {
+      return Scaffold(
+        backgroundColor: isDark
+            ? const Color(0xFF0A0E14)
+            : const Color(0xFFF8F9FF),
+        appBar: AppBar(
+          title: Text(
+            'CSAS Tracker',
+            style: GoogleFonts.outfit(fontWeight: FontWeight.bold),
+          ),
+        ),
+        body: Center(
+          child: Text(
+            'No timeline events found.',
+            style: GoogleFonts.outfit(color: Colors.grey),
+          ),
+        ),
+      );
+    }
+
+    _syncTabController(cats, this);
 
     return Scaffold(
-      backgroundColor: isDark ? const Color(0xFF0A0E14) : const Color(0xFFF8F9FF),
+      backgroundColor: isDark
+          ? const Color(0xFF0A0E14)
+          : const Color(0xFFF8F9FF),
       appBar: AppBar(
-        title: Text(
-          'CSAS Admissions Tracker',
-          style: GoogleFonts.outfit(fontWeight: FontWeight.bold, fontSize: 18),
+        backgroundColor: isDark ? const Color(0xFF161C24) : Colors.white,
+        elevation: 0,
+        title: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text(
+              'CSAS Admissions Tracker',
+              style: GoogleFonts.outfit(
+                fontWeight: FontWeight.bold,
+                fontSize: 16,
+              ),
+            ),
+            Text(
+              'DU 2026 Admission Cycle',
+              style: GoogleFonts.outfit(
+                fontSize: 11,
+                color: theme.colorScheme.primary.withOpacity(0.8),
+              ),
+            ),
+          ],
         ),
+        actions: [
+          IconButton(
+            tooltip: 'Refresh',
+            icon: const Icon(LucideIcons.refreshCw, size: 18),
+            onPressed: tracker.fetchTimeline,
+          ),
+          const SizedBox(width: 8),
+        ],
         bottom: TabBar(
           controller: _tabController,
-          labelStyle: GoogleFonts.outfit(fontWeight: FontWeight.bold, fontSize: 13),
+          isScrollable: true,
+          tabAlignment: TabAlignment.start,
+          labelStyle: GoogleFonts.outfit(
+            fontWeight: FontWeight.bold,
+            fontSize: 13,
+          ),
           indicatorColor: theme.colorScheme.primary,
           labelColor: theme.colorScheme.primary,
           unselectedLabelColor: Colors.grey,
-          tabs: const [
-            Tab(text: 'Phase 1'),
-            Tab(text: 'Phase 2'),
-            Tab(text: 'Phase 3'),
-          ],
+          tabs: cats.map((cat) {
+            final progress = tracker.getPhaseProgress(cat);
+            final pct = (progress * 100).toInt();
+            return Tab(text: pct > 0 ? '$cat  $pct%' : cat);
+          }).toList(),
         ),
       ),
       body: TabBarView(
-        controller: _tabController,
-        children: phases.map((phase) {
-          final phaseId = phase['id'] as String;
-          final title = phase['title'] as String;
-          final subtitle = phase['subtitle'] as String;
-          final deadline = phase['deadline'] as DateTime;
-          final phaseColor = phase['color'] as Color;
+        controller: _tabController!,
+        children: cats.map((cat) {
+          return _PhaseTab(
+            category: cat,
+            color: _colorFor(cat),
+            tracker: tracker,
+            isDark: isDark,
+            theme: theme,
+            iconFor: _iconFor,
+            onLaunch: _launch,
+          );
+        }).toList(),
+      ),
+    );
+  }
+}
 
-          final progress = tracker.getPhaseProgress(phaseId);
-          final countdownStr = tracker.getCountdownString(deadline);
-          final tasks = tracker.phaseTasks[phaseId] ?? [];
-          final isCompleted = progress == 1.0;
+// ─────────────────────────────────────────────────────────────────────────────
+// Per-phase tab content
+// ─────────────────────────────────────────────────────────────────────────────
+class _PhaseTab extends StatelessWidget {
+  final String category;
+  final Color color;
+  final DuTrackerProvider tracker;
+  final bool isDark;
+  final ThemeData theme;
+  final IconData Function(String) iconFor;
+  final Future<void> Function(String) onLaunch;
 
-          return SingleChildScrollView(
-            padding: const EdgeInsets.all(24),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                // Phase Header Card
-                Container(
-                  padding: const EdgeInsets.all(20),
-                  decoration: BoxDecoration(
-                    color: phaseColor.withOpacity(0.08),
-                    borderRadius: BorderRadius.circular(28),
-                    border: Border.all(color: phaseColor.withOpacity(0.15)),
-                  ),
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
+  const _PhaseTab({
+    required this.category,
+    required this.color,
+    required this.tracker,
+    required this.isDark,
+    required this.theme,
+    required this.iconFor,
+    required this.onLaunch,
+  });
+
+  DateTime _latestDateForCategory(String cat) {
+    final evs = tracker.eventsByCategory[cat] ?? [];
+    if (evs.isEmpty) return DateTime(2099);
+    return evs.map((e) => e.dateTime).reduce((a, b) => a.isAfter(b) ? a : b);
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final events = tracker.eventsByCategory[category] ?? [];
+    final progress = tracker.getPhaseProgress(category);
+    final isAllDone = progress == 1.0;
+
+    // Deadline = latest event date in this category
+    final deadline = _latestDateForCategory(category);
+    final countdownStr = tracker.getCountdownString(deadline);
+    final isClosed = countdownStr.contains('Closed');
+
+    return RefreshIndicator(
+      onRefresh: tracker.fetchTimeline,
+      child: SingleChildScrollView(
+        physics: const AlwaysScrollableScrollPhysics(),
+        padding: const EdgeInsets.fromLTRB(20, 20, 20, 40),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            // ── Phase summary card ──────────────────────────────────────────
+            Container(
+              padding: const EdgeInsets.all(20),
+              decoration: BoxDecoration(
+                color: color.withOpacity(0.07),
+                borderRadius: BorderRadius.circular(24),
+                border: Border.all(color: color.withOpacity(0.18)),
+              ),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Row(
                     children: [
-                      Row(
-                        children: [
-                          Container(
-                            padding: const EdgeInsets.all(10),
-                            decoration: BoxDecoration(
-                              color: phaseColor.withOpacity(0.15),
-                              shape: BoxShape.circle,
-                            ),
-                            child: Icon(
-                              isCompleted ? LucideIcons.checkCircle2 : LucideIcons.activity,
-                              color: phaseColor,
-                              size: 20,
-                            ),
-                          ),
-                          const SizedBox(width: 12),
-                          Expanded(
-                            child: Text(
-                              title,
-                              style: GoogleFonts.outfit(
-                                fontWeight: FontWeight.bold,
-                                fontSize: 16,
-                                color: phaseColor,
-                              ),
-                            ),
-                          ),
-                        ],
-                      ),
-                      const SizedBox(height: 12),
-                      Text(
-                        subtitle,
-                        style: GoogleFonts.inter(
-                          fontSize: 12,
-                          color: isDark ? Colors.grey : Colors.grey.shade700,
-                          height: 1.4,
+                      Container(
+                        padding: const EdgeInsets.all(10),
+                        decoration: BoxDecoration(
+                          color: color.withOpacity(0.15),
+                          shape: BoxShape.circle,
+                        ),
+                        child: Icon(
+                          isAllDone
+                              ? LucideIcons.checkCircle2
+                              : LucideIcons.activity,
+                          color: color,
+                          size: 20,
                         ),
                       ),
-                      const Divider(height: 24),
-                      Row(
-                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                        children: [
-                          Column(
-                            crossAxisAlignment: CrossAxisAlignment.start,
-                            children: [
-                              Text(
-                                'Countdown Deadline:',
-                                style: GoogleFonts.inter(fontSize: 10, color: Colors.grey),
-                              ),
-                              const SizedBox(height: 2),
-                              Text(
-                                countdownStr,
-                                style: GoogleFonts.outfit(
-                                  fontWeight: FontWeight.bold,
-                                  fontSize: 13,
-                                  color: countdownStr.contains('Closed') ? Colors.red : theme.colorScheme.primary,
-                                ),
-                              ),
-                            ],
+                      const SizedBox(width: 12),
+                      Expanded(
+                        child: Text(
+                          category,
+                          style: GoogleFonts.outfit(
+                            fontWeight: FontWeight.bold,
+                            fontSize: 17,
+                            color: color,
                           ),
-                          Container(
-                            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
-                            decoration: BoxDecoration(
-                              color: phaseColor.withOpacity(0.1),
-                              borderRadius: BorderRadius.circular(16),
-                            ),
-                            child: Text(
-                              '${(progress * 100).toInt()}% Done',
-                              style: GoogleFonts.outfit(
-                                fontWeight: FontWeight.bold,
-                                fontSize: 12,
-                                color: phaseColor,
-                              ),
-                            ),
-                          ),
-                        ],
+                        ),
                       ),
-                      const SizedBox(height: 16),
-                      // Progress Bar
-                      ClipRRect(
-                        borderRadius: BorderRadius.circular(8),
-                        child: LinearProgressIndicator(
-                          value: progress,
-                          color: phaseColor,
-                          backgroundColor: phaseColor.withOpacity(0.15),
-                          minHeight: 8,
+                      // Event count badge
+                      Container(
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: 10,
+                          vertical: 4,
+                        ),
+                        decoration: BoxDecoration(
+                          color: color.withOpacity(0.12),
+                          borderRadius: BorderRadius.circular(100),
+                        ),
+                        child: Text(
+                          '${events.length} events',
+                          style: GoogleFonts.outfit(
+                            fontSize: 11,
+                            fontWeight: FontWeight.w600,
+                            color: color,
+                          ),
                         ),
                       ),
                     ],
                   ),
-                ),
-                const SizedBox(height: 28),
+                  const SizedBox(height: 16),
+                  // Countdown row
+                  Row(
+                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                    children: [
+                      Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text(
+                            'Phase Deadline',
+                            style: GoogleFonts.outfit(
+                              fontSize: 10,
+                              color: Colors.grey,
+                            ),
+                          ),
+                          const SizedBox(height: 2),
+                          Text(
+                            countdownStr,
+                            style: GoogleFonts.outfit(
+                              fontWeight: FontWeight.bold,
+                              fontSize: 13,
+                              color: isClosed
+                                  ? Colors.red
+                                  : theme.colorScheme.primary,
+                            ),
+                          ),
+                        ],
+                      ),
+                      Container(
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: 12,
+                          vertical: 6,
+                        ),
+                        decoration: BoxDecoration(
+                          color: color.withOpacity(0.1),
+                          borderRadius: BorderRadius.circular(16),
+                        ),
+                        child: Text(
+                          '${(progress * 100).toInt()}% Done',
+                          style: GoogleFonts.outfit(
+                            fontWeight: FontWeight.bold,
+                            fontSize: 12,
+                            color: color,
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 14),
+                  // Progress bar
+                  ClipRRect(
+                    borderRadius: BorderRadius.circular(8),
+                    child: LinearProgressIndicator(
+                      value: progress,
+                      color: color,
+                      backgroundColor: color.withOpacity(0.14),
+                      minHeight: 8,
+                    ),
+                  ),
+                ],
+              ),
+            ),
 
-                // Interactive Checklist Label
-                Text(
-                  'Task Progress Checklist',
-                  style: GoogleFonts.outfit(
-                    fontSize: 18,
-                    fontWeight: FontWeight.bold,
+            // ── All done banner ─────────────────────────────────────────────
+            if (isAllDone) ...[
+              const SizedBox(height: 16),
+              Container(
+                padding: const EdgeInsets.all(16),
+                decoration: BoxDecoration(
+                  color: Colors.green.withOpacity(0.08),
+                  borderRadius: BorderRadius.circular(20),
+                  border: Border.all(color: Colors.green.withOpacity(0.2)),
+                ),
+                child: Row(
+                  children: [
+                    const Icon(
+                      LucideIcons.partyPopper,
+                      color: Colors.green,
+                      size: 22,
+                    ),
+                    const SizedBox(width: 12),
+                    Expanded(
+                      child: Text(
+                        'All tasks marked! You\'re on track 🎉',
+                        style: GoogleFonts.outfit(
+                          fontWeight: FontWeight.w600,
+                          fontSize: 13,
+                          color: Colors.green.shade700,
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ],
+
+            const SizedBox(height: 24),
+            Text(
+              'Timeline Events',
+              style: GoogleFonts.outfit(
+                fontSize: 16,
+                fontWeight: FontWeight.bold,
+              ),
+            ),
+            const SizedBox(height: 12),
+
+            // ── Events list ─────────────────────────────────────────────────
+            ...events.map(
+              (event) => _EventCard(
+                event: event,
+                color: color,
+                isDark: isDark,
+                theme: theme,
+                tracker: tracker,
+                iconFor: iconFor,
+                onLaunch: onLaunch,
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Individual event card
+// ─────────────────────────────────────────────────────────────────────────────
+class _EventCard extends StatelessWidget {
+  final CsasTimelineEvent event;
+  final Color color;
+  final bool isDark;
+  final ThemeData theme;
+  final DuTrackerProvider tracker;
+  final IconData Function(String) iconFor;
+  final Future<void> Function(String) onLaunch;
+
+  const _EventCard({
+    required this.event,
+    required this.color,
+    required this.isDark,
+    required this.theme,
+    required this.tracker,
+    required this.iconFor,
+    required this.onLaunch,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final isChecked = tracker.isTaskChecked(event.id);
+    final countdown = tracker.getEventCountdown(event);
+    final isClosed = countdown.contains('Closed');
+    final isPast = event.dateTime.isBefore(DateTime.now());
+
+    return AnimatedContainer(
+      duration: const Duration(milliseconds: 220),
+      margin: const EdgeInsets.only(bottom: 12),
+      decoration: BoxDecoration(
+        color: isChecked
+            ? color.withOpacity(0.05)
+            : (isDark ? const Color(0xFF1A2233) : Colors.white),
+        borderRadius: BorderRadius.circular(20),
+        border: Border.all(
+          color: event.isImportant
+              ? color.withOpacity(0.5)
+              : (isChecked
+                    ? color.withOpacity(0.3)
+                    : (isDark
+                          ? Colors.white.withOpacity(0.06)
+                          : Colors.grey.shade200)),
+          width: event.isImportant ? 1.5 : 1,
+        ),
+        boxShadow: event.isImportant
+            ? [
+                BoxShadow(
+                  color: color.withOpacity(0.08),
+                  blurRadius: 12,
+                  offset: const Offset(0, 4),
+                ),
+              ]
+            : null,
+      ),
+      child: Material(
+        color: Colors.transparent,
+        child: InkWell(
+          borderRadius: BorderRadius.circular(20),
+          onTap: () => tracker.toggleTask(event.id),
+          child: Padding(
+            padding: const EdgeInsets.all(16),
+            child: Row(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                // ── Checkbox ────────────────────────────────────────────────
+                Padding(
+                  padding: const EdgeInsets.only(top: 2),
+                  child: AnimatedContainer(
+                    duration: const Duration(milliseconds: 220),
+                    width: 22,
+                    height: 22,
+                    decoration: BoxDecoration(
+                      color: isChecked ? color : Colors.transparent,
+                      borderRadius: BorderRadius.circular(6),
+                      border: Border.all(
+                        color: isChecked ? color : Colors.grey.shade400,
+                        width: 1.8,
+                      ),
+                    ),
+                    child: isChecked
+                        ? const Icon(
+                            LucideIcons.check,
+                            size: 14,
+                            color: Colors.white,
+                          )
+                        : null,
                   ),
                 ),
-                const SizedBox(height: 16),
+                const SizedBox(width: 14),
 
-                if (isCompleted)
-                  Container(
-                    margin: const EdgeInsets.only(bottom: 20),
-                    padding: const EdgeInsets.all(16),
-                    decoration: BoxDecoration(
-                      color: Colors.green.withOpacity(0.08),
-                      borderRadius: BorderRadius.circular(20),
-                      border: Border.all(color: Colors.green.withOpacity(0.2)),
-                    ),
-                    child: Row(
-                      children: [
-                        const Icon(LucideIcons.partyPopper, color: Colors.green, size: 24),
-                        const SizedBox(width: 12),
-                        Expanded(
-                          child: Column(
-                            crossAxisAlignment: CrossAxisAlignment.start,
-                            children: [
-                              Text(
-                                'Phase Complete! 🎉',
+                // ── Content ─────────────────────────────────────────────────
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      // Title row
+                      Row(
+                        children: [
+                          Icon(
+                            iconFor(event.iconName),
+                            size: 14,
+                            color: isChecked ? Colors.grey : color,
+                          ),
+                          const SizedBox(width: 6),
+                          Expanded(
+                            child: Text(
+                              event.title,
+                              style: GoogleFonts.outfit(
+                                fontSize: 14,
+                                fontWeight: FontWeight.w700,
+                                decoration: isChecked
+                                    ? TextDecoration.lineThrough
+                                    : null,
+                                color: isChecked
+                                    ? Colors.grey
+                                    : (isDark ? Colors.white : Colors.black87),
+                              ),
+                            ),
+                          ),
+                          // Important badge
+                          if (event.isImportant)
+                            Container(
+                              margin: const EdgeInsets.only(left: 6),
+                              padding: const EdgeInsets.symmetric(
+                                horizontal: 7,
+                                vertical: 2,
+                              ),
+                              decoration: BoxDecoration(
+                                color: color.withOpacity(0.12),
+                                borderRadius: BorderRadius.circular(100),
+                              ),
+                              child: Text(
+                                'Important',
                                 style: GoogleFonts.outfit(
-                                  fontWeight: FontWeight.bold,
-                                  fontSize: 14,
-                                  color: Colors.green.shade700,
+                                  fontSize: 9,
+                                  fontWeight: FontWeight.w700,
+                                  color: color,
                                 ),
                               ),
-                              const SizedBox(height: 2),
-                              Text(
-                                'Awesome! You are perfectly on track for this CSAS phase admissions cycle.',
-                                style: GoogleFonts.inter(fontSize: 11, color: Colors.green.shade800),
-                              ),
-                            ],
+                            ),
+                        ],
+                      ),
+
+                      // Description
+                      if (event.description?.isNotEmpty == true) ...[
+                        const SizedBox(height: 5),
+                        Text(
+                          event.description!,
+                          style: GoogleFonts.outfit(
+                            fontSize: 12,
+                            color: Colors.grey,
+                            height: 1.4,
                           ),
                         ),
                       ],
-                    ),
-                  ),
 
-                // Interactive Task Cards list
-                ListView.builder(
-                  shrinkWrap: true,
-                  physics: const NeverScrollableScrollPhysics(),
-                  itemCount: tasks.length,
-                  itemBuilder: (context, index) {
-                    final task = tasks[index];
-                    final key = 'csas_task_${phaseId}_${task.replaceAll(' ', '_')}';
-                    final isChecked = tracker.taskStates[key] ?? false;
+                      const SizedBox(height: 8),
 
-                    return Card(
-                      margin: const EdgeInsets.only(bottom: 16),
-                      shape: RoundedRectangleBorder(
-                        borderRadius: BorderRadius.circular(20),
+                      // Date + countdown row
+                      Wrap(
+                        spacing: 10,
+                        runSpacing: 4,
+                        children: [
+                          _Tag(
+                            icon: LucideIcons.calendar,
+                            label: event.eventTime != null
+                                ? '${event.eventDate}  ${event.eventTime}'
+                                : event.eventDate,
+                            color: isPast
+                                ? Colors.grey
+                                : theme.colorScheme.primary,
+                          ),
+                          _Tag(
+                            icon: isClosed
+                                ? LucideIcons.checkCircle
+                                : LucideIcons.clock,
+                            label: countdown,
+                            color: isClosed
+                                ? Colors.green.shade600
+                                : (isPast
+                                      ? Colors.red.shade400
+                                      : Colors.amber.shade700),
+                          ),
+                        ],
                       ),
-                      elevation: 1,
-                      child: InkWell(
-                        onTap: () => tracker.toggleTask(phaseId, task),
-                        borderRadius: BorderRadius.circular(20),
-                        child: Padding(
-                          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 16),
-                          child: Row(
-                            children: [
-                              AnimatedContainer(
-                                duration: const Duration(milliseconds: 250),
-                                width: 24,
-                                height: 24,
-                                decoration: BoxDecoration(
-                                  color: isChecked ? phaseColor : Colors.transparent,
-                                  border: Border.all(
-                                    color: isChecked ? phaseColor : Colors.grey.shade400,
-                                    width: 2,
-                                  ),
-                                  borderRadius: BorderRadius.circular(8),
+
+                      // Link button
+                      if (event.linkUrl?.isNotEmpty == true) ...[
+                        const SizedBox(height: 10),
+                        GestureDetector(
+                          onTap: () => onLaunch(event.linkUrl!),
+                          child: Container(
+                            padding: const EdgeInsets.symmetric(
+                              horizontal: 12,
+                              vertical: 6,
+                            ),
+                            decoration: BoxDecoration(
+                              color: color.withOpacity(0.08),
+                              borderRadius: BorderRadius.circular(100),
+                              border: Border.all(color: color.withOpacity(0.2)),
+                            ),
+                            child: Row(
+                              mainAxisSize: MainAxisSize.min,
+                              children: [
+                                Icon(
+                                  LucideIcons.externalLink,
+                                  size: 12,
+                                  color: color,
                                 ),
-                                child: isChecked
-                                    ? const Icon(LucideIcons.check, size: 16, color: Colors.white)
-                                    : null,
-                              ),
-                              const SizedBox(width: 16),
-                              Expanded(
-                                child: Text(
-                                  task,
-                                  style: GoogleFonts.inter(
-                                    fontSize: 13.5,
-                                    fontWeight: isChecked ? FontWeight.w500 : FontWeight.normal,
-                                    decoration: isChecked ? TextDecoration.lineThrough : null,
-                                    color: isChecked ? Colors.grey : theme.textTheme.bodyLarge?.color,
+                                const SizedBox(width: 5),
+                                Text(
+                                  event.linkLabel?.isNotEmpty == true
+                                      ? event.linkLabel!
+                                      : 'Open Link',
+                                  style: GoogleFonts.outfit(
+                                    fontSize: 12,
+                                    fontWeight: FontWeight.w600,
+                                    color: color,
                                   ),
                                 ),
-                              ),
-                            ],
+                              ],
+                            ),
                           ),
                         ),
-                      ),
-                    );
-                  },
+                      ],
+                    ],
+                  ),
                 ),
               ],
             ),
-          );
-        }).toList(),
+          ),
+        ),
       ),
+    );
+  }
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Tiny tag row widget
+// ─────────────────────────────────────────────────────────────────────────────
+class _Tag extends StatelessWidget {
+  final IconData icon;
+  final String label;
+  final Color color;
+
+  const _Tag({required this.icon, required this.label, required this.color});
+
+  @override
+  Widget build(BuildContext context) {
+    return Row(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        Icon(icon, size: 11, color: color),
+        const SizedBox(width: 3),
+        Text(
+          label,
+          style: GoogleFonts.outfit(
+            fontSize: 11,
+            color: color,
+            fontWeight: FontWeight.w500,
+          ),
+        ),
+      ],
     );
   }
 }

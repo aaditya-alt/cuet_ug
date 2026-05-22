@@ -27,6 +27,8 @@
                 <category android:name="android.intent.category.LAUNCHER"/>
             </intent-filter>
 
+            
+
             <!-- Deep Linking -->
             <intent-filter android:autoVerify="true">
                 <action android:name="android.intent.action.VIEW" />

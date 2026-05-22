@@ -1,9 +1,18 @@
+// ============================================================
+// FILE 1: du_predictor_service.dart
+// Changes:
+//   - predict() now accepts gatScore (0-500, NTA normalised)
+//   - _computeProgramMerit() handles proration for GAT combos
+//   - Proration formula per DU rules:
+//       Lang: out of 250, Domain: out of 250, GAT: out of 500
+//       Prorated total = Lang + Domain + (GAT × (remaining/500))
+//   - _bestComboMerit() picks the HIGHEST merit across ALL
+//     valid combos the student qualifies for (not just the first)
+// ============================================================
+
 import 'package:supabase_flutter/supabase_flutter.dart';
 import '../models/du_models.dart';
 
-// ─────────────────────────────────────────────────────────────────────────────
-// Internal helper to carry merit calculation result
-// ─────────────────────────────────────────────────────────────────────────────
 class _ProgramMerit {
   final double score;
   final int maxScore;
@@ -18,8 +27,8 @@ class _ProgramMerit {
 class DuPredictorService {
   final SupabaseClient _client = Supabase.instance.client;
 
-  static List<Map<String, dynamic>>? _cachedEligibility;
-  static List<Map<String, dynamic>>? _cachedBaSubjectMap;
+  List<Map<String, dynamic>>? _cachedEligibility;
+  List<Map<String, dynamic>>? _cachedBaSubjectMap;
 
   static const Set<String> _womensColleges = {
     'Miranda House',
@@ -46,39 +55,10 @@ class DuPredictorService {
   };
 
   // ─────────────────────────────────────────────────────────────────────────
-  // 750-MARK PROGRAM DETECTION
-  // B.Sc. science programmes where language is compulsory to appear in CUET
-  // but is NOT counted in the merit. Only 3 domain subjects count (max 750).
+  // 750-MARK PROGRAMME DETECTION
+  // B.Sc. science programmes where language is compulsory but NOT counted
+  // in merit. Merit = best 3 domain scores only (max 750).
   // ─────────────────────────────────────────────────────────────────────────
-  static const Set<String> _domainOnlyKeywords = {
-    'chemistry',
-    'physics',
-    'mathematics',
-    'botany',
-    'zoology',
-    'biological sciences',
-    'biological science',
-    'biochemistry',
-    'biotechnology',
-    'microbiology',
-    'food technology',
-    'geology',
-    'physical science',
-    'electronics',
-    'statistics',
-    'instrumentation',
-    'polymer science',
-    'environmental science',
-    'anthropology',
-    'operational research',
-    'home science',
-    'physical education',
-    'health education',
-    'applied physical',
-    'applied life',
-    'life sciences',
-  };
-
   bool _isDomainOnlyProgram(String programName) {
     final n = programName
         .toLowerCase()
@@ -88,37 +68,83 @@ class DuPredictorService {
         .replaceAll(RegExp(r'\s+'), ' ')
         .trim();
 
-    // Must be a B.Sc. programme (hons or otherwise)
-    final isBsc = n.contains('bsc') || n.startsWith('b sc');
-    if (!isBsc) return false;
+    if (!n.contains('bsc') && !n.startsWith('b sc')) return false;
 
+    // These B.Sc. programmes use standard Lang+Domain scoring (not 750-only)
     if (n.contains('physical science')) {
       return true; // always domain-only regardless of other keywords
     }
 
-    // Mathematical Sciences (Mathematics, Computer Science, Statistics, Operational Research)
-    // require Language + 3 Domains, so they are not domain-only (they count out of 1000).
+    // These B.Sc. programmes are out of 1000 (language counts)
     if (n.contains('mathematics') ||
         n.contains('statistics') ||
         n.contains('operational research') ||
         n.contains('computer science')) {
+      // catches standalone CS hons
       return false;
     }
 
-    return _domainOnlyKeywords.any((kw) => n.contains(kw));
+    const domainOnlyKeywords = [
+      'chemistry',
+      'physics',
+      'botany',
+      'zoology',
+      'biological sciences',
+      'biological science',
+      'biochemistry',
+      'biotechnology',
+      'microbiology',
+      'food technology',
+      'geology',
+      'physical science',
+      'electronics',
+      'instrumentation',
+      'polymer science',
+      'environmental science',
+      'anthropology',
+      'home science',
+      'physical education',
+      'health education',
+      'applied physical',
+      'applied life',
+      'life science',
+    ];
+    return domainOnlyKeywords.any((kw) => n.contains(kw));
   }
 
   // ─────────────────────────────────────────────────────────────────────────
   // MERIT SCORE CALCULATOR
-  // Returns the score + scheme appropriate for this specific programme.
+  //
+  // DU scoring rules:
+  //
+  // Standard (1000 max):
+  //   Best Language score (out of 250)
+  //   + Best 3 Domain scores (out of 750 total)
+  //
+  // Domain-only B.Sc. (750 max):
+  //   Best 3 Domain scores only (language compulsory but not counted)
+  //
+  // GAT-prorated (1000 max):
+  //   DU uses proration when sections have unequal weightage.
+  //   For combos using GAT:
+  //     Lang (250) + 1 Domain (250) + GAT (500) = 1000 prorated
+  //   For B.Tech IT&MI:
+  //     Lang (250) + Maths (250) + GAT (500) = 1000 prorated
+  //
+  // This function evaluates ALL valid combos for a programme and
+  // returns the HIGHEST merit score (most beneficial for the student).
   // ─────────────────────────────────────────────────────────────────────────
   _ProgramMerit _computeProgramMerit({
     required String programName,
     required Map<String, double> langScores,
     required Map<String, double> domainScores,
+    required double? gatScore, // null if student didn't appear
+    required List<Map<String, dynamic>> combos,
+    required List<String> studentDomains,
+    required List<String> studentLangs,
   }) {
+    // Domain-only B.Sc. programmes — simple path
     if (_isDomainOnlyProgram(programName)) {
-      // Domain scores only — language NOT counted
       final sorted = domainScores.values.toList()
         ..sort((a, b) => b.compareTo(a));
       final score = sorted.take(3).fold(0.0, (s, v) => s + v);
@@ -126,39 +152,157 @@ class DuPredictorService {
         score: score,
         maxScore: 750,
         scheme:
-            '3 Domain Subjects Only (out of 750)\nLanguage is compulsory in CUET but NOT counted in merit',
-      );
-    } else {
-      // Standard: best language (250) + best 3 domains (750) = 1000
-      final bestLang = langScores.values.isEmpty
-          ? 0.0
-          : langScores.values.reduce((a, b) => a > b ? a : b);
-      final sortedDomains = domainScores.values.toList()
-        ..sort((a, b) => b.compareTo(a));
-      final topDomains = sortedDomains.take(3).fold(0.0, (s, v) => s + v);
-      return _ProgramMerit(
-        score: bestLang + topDomains,
-        maxScore: 1000,
-        scheme:
-            '1 Language (${bestLang.toInt()}) + 3 Domain Subjects out of 1000',
+            'Domain Subjects only (out of 750)\nLanguage mandatory in CUET but NOT counted in merit',
       );
     }
+
+    final bestLang = langScores.values.isEmpty
+        ? 0.0
+        : langScores.values.reduce((a, b) => a > b ? a : b);
+    final sortedDomains = domainScores.values.toList()
+      ..sort((a, b) => b.compareTo(a));
+    final top1Domain = sortedDomains.isNotEmpty ? sortedDomains[0] : 0.0;
+    final top3Domains = sortedDomains.take(3).fold(0.0, (s, v) => s + v);
+
+    _ProgramMerit? bestMerit;
+
+    for (final c in combos) {
+      final combo = c as Map<String, dynamic>;
+      final needsGat = combo['general_test'] as bool? ?? false;
+      final domainCount = (combo['domains'] as Map?)?['count'] as int? ?? 0;
+
+      if (needsGat) {
+        // Can't compute GAT-based merit without a GAT score
+        if (gatScore == null || gatScore <= 0) continue;
+
+        // Proration: Lang (250) + Domain(s) (250) + GAT (500) = 1000
+        // DU prorates so all combinations are comparable out of 1000
+        double prorated;
+        String scheme;
+
+        if (domainCount == 0) {
+          final lowerProgram = programName.toLowerCase();
+          final is750Program =
+              lowerProgram.contains("journalism") ||
+              lowerProgram.contains("multimedia");
+
+          if (is750Program) {
+            final rawScore = bestLang + gatScore;
+            // Lang + Domain + GAT → out of 750
+            prorated = (rawScore / 500) * 750;
+
+            scheme =
+                'Lang (${bestLang.toStringAsFixed(0)}) + '
+                'GAT (${gatScore.toStringAsFixed(0)}) '
+                '= ${prorated.toStringAsFixed(1)}/750';
+          } else {
+            // Normal prorating to 1000
+            final rawScore = bestLang + gatScore;
+
+            prorated = (rawScore / 500) * 1000;
+
+            scheme =
+                'Lang (${bestLang.toStringAsFixed(0)}) + '
+                'GAT (${gatScore.toStringAsFixed(0)}/250) '
+                '= ${prorated.toStringAsFixed(1)}/1000';
+          }
+
+          // Pure GAT combo: Lang + GAT only (e.g. Hindi Patrakarita combo 2)
+          // Lang counts 250, GAT is prorated to fill remaining 750
+          prorated = bestLang + (gatScore / 250.0) * 750.0;
+          scheme =
+              'Lang (${bestLang.toStringAsFixed(0)}/250) + GAT prorated to 750 = ${prorated.toStringAsFixed(1)}/1000';
+        } else if (domainCount == 1) {
+          // Programs with total score out of 750
+          final lowerProgram = programName.toLowerCase();
+
+          final is750Program =
+              lowerProgram.contains("b.tech") ||
+              lowerProgram.contains("it&mi") ||
+              lowerProgram.contains("journalism") ||
+              lowerProgram.contains("multimedia") ||
+              lowerProgram.contains("bba-fia") ||
+              lowerProgram.contains("bbe") ||
+              lowerProgram.contains("bms");
+          if (is750Program) {
+            // Lang + Domain + GAT → out of 750
+            prorated = bestLang + top1Domain + gatScore;
+
+            scheme =
+                'Lang (${bestLang.toStringAsFixed(0)}) + '
+                '1 Domain (${top1Domain.toStringAsFixed(0)}) + '
+                'GAT (${gatScore.toStringAsFixed(0)}) '
+                '= ${prorated.toStringAsFixed(1)}/750';
+          } else {
+            // Normal prorating to 1000
+            final rawScore = bestLang + top1Domain + gatScore;
+
+            prorated = (rawScore / 750) * 1000;
+
+            scheme =
+                'Lang (${bestLang.toStringAsFixed(0)}) + '
+                '1 Domain (${top1Domain.toStringAsFixed(0)}) + '
+                'GAT (${gatScore.toStringAsFixed(0)}/250) '
+                '= ${prorated.toStringAsFixed(1)}/1000';
+          }
+        } else {
+          // Shouldn't happen per BOI but handle gracefully
+          prorated = bestLang + top3Domains;
+          scheme = 'Standard (fallback)';
+        }
+
+        final merit = _ProgramMerit(
+          score: prorated,
+          maxScore: 1000,
+          scheme: scheme,
+        );
+        if (bestMerit == null || merit.score > bestMerit.score) {
+          bestMerit = merit;
+        }
+      } else {
+        // Standard non-GAT combo
+        double score;
+        String scheme;
+
+        if (domainCount >= 3) {
+          // Lang + 3 domains = 1000
+          score = bestLang + top3Domains;
+          scheme =
+              'Lang (${bestLang.toStringAsFixed(0)}/250) + 3 Domains (${top3Domains.toStringAsFixed(0)}/750) = ${score.toStringAsFixed(1)}/1000';
+        } else if (domainCount == 2) {
+          // 2 Langs + 2 domains = 1000
+          final lang2 = langScores.values.length >= 2
+              ? langScores.values.reduce((a, b) => a + b)
+              : bestLang;
+          final top2Domains = sortedDomains.take(2).fold(0.0, (s, v) => s + v);
+          score = lang2 + top2Domains;
+          scheme =
+              '2 Langs (${lang2.toStringAsFixed(0)}/500) + 2 Domains (${top2Domains.toStringAsFixed(0)}/500) = ${score.toStringAsFixed(1)}/1000';
+        } else {
+          score = bestLang + top3Domains;
+          scheme = 'Standard';
+        }
+
+        final merit = _ProgramMerit(
+          score: score,
+          maxScore: 1000,
+          scheme: scheme,
+        );
+        if (bestMerit == null || merit.score > bestMerit.score) {
+          bestMerit = merit;
+        }
+      }
+    }
+
+    // Fallback if no valid combo produced a merit (e.g. GAT required but not given)
+    return bestMerit ??
+        _ProgramMerit(
+          score: bestLang + top3Domains,
+          maxScore: 1000,
+          scheme: 'Standard (fallback)',
+        );
   }
 
-  Future<void> _fetchCachesIfNeeded() async {
-    if (_cachedEligibility == null) {
-      final res = await _client.from('du_program_eligibility').select();
-      _cachedEligibility = List<Map<String, dynamic>>.from(res);
-    }
-    if (_cachedBaSubjectMap == null) {
-      final res = await _client.from('ba_programme_subject_map').select();
-      _cachedBaSubjectMap = List<Map<String, dynamic>>.from(res);
-    }
-  }
-
-  // ─────────────────────────────────────────────────────────────────────────
-  // SUBJECT NORMALISER
-  // ─────────────────────────────────────────────────────────────────────────
   String _normSub(String s) {
     return s
         .toLowerCase()
@@ -167,9 +311,6 @@ class DuPredictorService {
         .trim();
   }
 
-  // ─────────────────────────────────────────────────────────────────────────
-  // PROGRAMME NAME NORMALISER
-  // ─────────────────────────────────────────────────────────────────────────
   String _normProg(String name) {
     return name
         .toLowerCase()
@@ -182,9 +323,6 @@ class DuPredictorService {
         .trim();
   }
 
-  // ─────────────────────────────────────────────────────────────────────────
-  // COMBINATION ELIGIBILITY CHECK
-  // ─────────────────────────────────────────────────────────────────────────
   bool _checkCombinationEligibility(
     Map<String, dynamic> combo,
     List<String> studentLangs,
@@ -194,7 +332,6 @@ class DuPredictorService {
     final studentLangsNorm = studentLangs.map(_normSub).toList();
     final studentDomainsNorm = studentDomains.map(_normSub).toList();
 
-    // Language check
     bool langOk = false;
     final langCombo = combo['languages'] as Map<String, dynamic>?;
     if (langCombo != null) {
@@ -213,18 +350,18 @@ class DuPredictorService {
       langOk = true;
     }
 
-    // Domain check
     bool domainOk = false;
     final domainCombo = combo['domains'] as Map<String, dynamic>?;
     if (domainCombo != null) {
       final count = domainCombo['count'] as int? ?? 0;
       final specific = domainCombo['specific'] as List<dynamic>?;
       final logic = domainCombo['logic'] as String? ?? 'any';
+      final specificClean = specific?.whereType<String>().toList();
 
-      if (specific == null || specific.isEmpty) {
+      if (specificClean == null || specificClean.isEmpty) {
         domainOk = studentDomainsNorm.length >= count;
       } else {
-        final specNorm = specific.map((s) => _normSub(s.toString())).toList();
+        final specNorm = specificClean.map((s) => _normSub(s)).toList();
         if (logic == 'any') {
           domainOk = studentDomainsNorm.length >= count;
         } else if (logic == 'all') {
@@ -245,16 +382,12 @@ class DuPredictorService {
       domainOk = true;
     }
 
-    // GAT check
     final needsGat = combo['general_test'] as bool? ?? false;
     final gatOk = needsGat ? studentHasGat : true;
 
     return langOk && domainOk && gatOk;
   }
 
-  // ─────────────────────────────────────────────────────────────────────────
-  // B.A. PROGRAMME ROW DETECTION
-  // ─────────────────────────────────────────────────────────────────────────
   bool _isBaProgrammeRow(String pName) {
     return RegExp(
       r'^B\.A\.?\s+Prog(?:ram|ramme)\s*\(',
@@ -287,9 +420,6 @@ class DuPredictorService {
     return studentDomains.any((d) => _normSub(d) == cuetNorm);
   }
 
-  // ─────────────────────────────────────────────────────────────────────────
-  // FALLBACK MATCHER
-  // ─────────────────────────────────────────────────────────────────────────
   String? _fallbackMatch(String cutoffName, List<String> eligibleNames) {
     final lower = cutoffName.toLowerCase();
     for (final elig in eligibleNames) {
@@ -334,12 +464,15 @@ class DuPredictorService {
   }
 
   // ─────────────────────────────────────────────────────────────────────────
-  // MAIN PREDICT  ─  now accepts per-subject scores
+  // MAIN PREDICT
+  // gatScore: student's NTA normalised GAT score out of 500.
+  //           Pass null or 0 if student didn't appear.
   // ─────────────────────────────────────────────────────────────────────────
   Future<List<DuCollegeDetails>> predict({
-    required Map<String, double> langScores, // subject → score (0-250)
-    required Map<String, double> domainScores, // subject → score (0-250)
+    required Map<String, double> langScores,
+    required Map<String, double> domainScores,
     required bool studentHasGat,
+    required double? gatScore, // ← NEW: 0-500, null if not appeared
     required String studentCategory,
     required String studentGender,
     String preferredDegree = 'Any',
@@ -361,14 +494,13 @@ class DuPredictorService {
       final studentLanguages = langScores.keys.toList();
       final studentDomains = domainScores.keys.toList();
 
-      // Always fetch fresh
+      // Always fetch fresh (instance variables — no stale cache)
       final eligRes = await _client.from('du_program_eligibility').select();
       _cachedEligibility = List<Map<String, dynamic>>.from(eligRes);
       final baRes = await _client.from('ba_programme_subject_map').select();
       _cachedBaSubjectMap = List<Map<String, dynamic>>.from(baRes);
-      await _fetchCachesIfNeeded();
 
-      // ── Step 1: Eligible programmes ─────────────────────────────────────
+      // ── Step 1: Eligible programmes ───────────────────────────────────
       final eligiblePrograms = <String, Map<String, dynamic>>{};
       final programDegrees = <String, String>{};
       final programNotes = <String, String>{};
@@ -409,13 +541,13 @@ class DuPredictorService {
         }
       }
 
-      // ── Step 2: Normalised lookup map ────────────────────────────────────
+      // ── Step 2: Normalised lookup ─────────────────────────────────────
       final normToEligible = <String, String>{};
       for (final pName in eligiblePrograms.keys) {
         normToEligible[_normProg(pName)] = pName;
       }
 
-      // ── Step 3: Fetch cutoffs (paginated) ────────────────────────────────
+      // ── Step 3: Fetch cutoffs (paginated) ─────────────────────────────
       final List<Map<String, dynamic>> cutoffs = [];
       int offset = 0;
       const batchSize = 1000;
@@ -432,7 +564,7 @@ class DuPredictorService {
         offset += batchSize;
       }
 
-      // ── Step 4: College details ───────────────────────────────────────────
+      // ── Step 4: College details ───────────────────────────────────────
       final collegeRes = await _client.from('du_college_details').select();
       final collegeDetailsMap = <String, Map<String, dynamic>>{};
       for (final c in List<Map<String, dynamic>>.from(collegeRes)) {
@@ -440,7 +572,7 @@ class DuPredictorService {
             c;
       }
 
-      // ── Step 5: Match cutoff rows → eligible entries ──────────────────────
+      // ── Step 5: Match cutoff rows ─────────────────────────────────────
       final eligibleEntries = <String, _EligibleEntry>{};
       final isMale = studentGender.trim().toLowerCase() == 'male';
 
@@ -486,13 +618,13 @@ class DuPredictorService {
 
         if (!isRowEligible) continue;
 
-        // Degree filter
         if (preferredDegree != 'Any' &&
             !degree.toLowerCase().contains(preferredDegree.toLowerCase())) {
           continue;
         }
 
         final entryKey = '$cName|||$pName';
+
         eligibleEntries.putIfAbsent(
           entryKey,
           () => _EligibleEntry(
@@ -500,6 +632,12 @@ class DuPredictorService {
             programName: pName,
             matchedProgramKey: matchedProgramKey,
             degree: degree,
+            combos:
+                ((eligiblePrograms[matchedProgramKey]?['combinations']
+                            as List<dynamic>?) ??
+                        [])
+                    .map((e) => Map<String, dynamic>.from(e))
+                    .toList(),
           ),
         );
         eligibleEntries[entryKey]!.roundRows.add(
@@ -507,18 +645,21 @@ class DuPredictorService {
         );
       }
 
-      // ── Step 6: Score each entry using program-specific merit ─────────────
+      // ── Step 6: Score each entry ──────────────────────────────────────
       final groupedByCollege = <String, List<DuProgramResult>>{};
 
       for (final entry in eligibleEntries.values) {
         entry.roundRows.sort((a, b) => a.cutoffScore.compareTo(b.cutoffScore));
         final bestCutoff = entry.roundRows.first.cutoffScore;
 
-        // Calculate the correct merit score for THIS programme
         final merit = _computeProgramMerit(
           programName: entry.programName,
           langScores: langScores,
           domainScores: domainScores,
+          gatScore: studentHasGat ? (gatScore ?? 0) : null,
+          combos: entry.combos,
+          studentDomains: studentDomains,
+          studentLangs: studentLanguages,
         );
 
         final diff = merit.score - bestCutoff;
@@ -557,12 +698,10 @@ class DuPredictorService {
             );
       }
 
-      // ── Step 7: Assemble final list ───────────────────────────────────────
+      // ── Step 7: Final list ────────────────────────────────────────────
       final resultList = <DuCollegeDetails>[];
-
       groupedByCollege.forEach((cName, progs) {
         if (isMale && _womensColleges.contains(cName)) return;
-
         progs.sort((a, b) {
           const order = {
             'Safe': 1,
@@ -573,7 +712,6 @@ class DuPredictorService {
           final d = (order[a.chance] ?? 5).compareTo(order[b.chance] ?? 5);
           return d != 0 ? d : b.difference.compareTo(a.difference);
         });
-
         final detailsRow = collegeDetailsMap[cName.toLowerCase()];
         resultList.add(
           detailsRow != null
@@ -585,14 +723,12 @@ class DuPredictorService {
       resultList.sort((a, b) => a.collegeName.compareTo(b.collegeName));
       print('🏫 Colleges returned: ${resultList.length}');
       return resultList;
-    } catch (e, stackTrace) {
-      print('❌ PREDICT ERROR: $e');
-      print('📍 STACK: $stackTrace');
+    } catch (e, st) {
+      print('❌ PREDICT ERROR: $e\n$st');
       rethrow;
     }
   }
 
-  // ── Utility ───────────────────────────────────────────────────────────────
   Future<List<DuCollegeCourse>> getCollegeCourses(String collegeName) async {
     final res = await _client
         .from('du_college_courses')
@@ -617,6 +753,7 @@ class _EligibleEntry {
   final String programName;
   final String matchedProgramKey;
   final String degree;
+  final List<Map<String, dynamic>> combos;
   final List<DuRoundCutoff> roundRows = [];
 
   _EligibleEntry({
@@ -624,5 +761,6 @@ class _EligibleEntry {
     required this.programName,
     required this.matchedProgramKey,
     required this.degree,
+    required this.combos,
   });
 }

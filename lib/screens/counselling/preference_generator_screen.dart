@@ -1,3 +1,4 @@
+import 'dart:convert';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:google_fonts/google_fonts.dart';
@@ -9,7 +10,7 @@ import '../../providers/du_preference_service.dart';
 import '../../models/du_models.dart';
 
 // ─────────────────────────────────────────────────────────────────────────────
-// DATA MODEL for a ranked preference item
+// DATA MODEL
 // ─────────────────────────────────────────────────────────────────────────────
 class _PrefItem {
   final String collegeName;
@@ -36,6 +37,18 @@ class _PrefItem {
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
+// CATEGORY MAPPING  — UI label → DB value in du_cutoffs.category
+// ─────────────────────────────────────────────────────────────────────────────
+const Map<String, String> _categoryDbMap = {
+  'General (UR)': 'UR',
+  'OBC (NCL)': 'OBC',
+  'SC': 'SC',
+  'ST': 'ST',
+  'EWS': 'EWS',
+  'PwBD': 'PwBD',
+};
+
+// ─────────────────────────────────────────────────────────────────────────────
 // MAIN SCREEN
 // ─────────────────────────────────────────────────────────────────────────────
 class PreferenceGeneratorScreen extends StatefulWidget {
@@ -49,18 +62,18 @@ class PreferenceGeneratorScreen extends StatefulWidget {
 class _PreferenceGeneratorScreenState extends State<PreferenceGeneratorScreen> {
   int _currentStep = 0;
 
-  // ── Step 1: Course selection
+  // Step 1
   final Set<String> _selectedCourses = {};
   bool _loadingCourses = true;
   Map<String, List<String>> _courseCategories = {};
 
-  // ── Step 2: Preferences
+  // Step 2
   String _selectedCampus = 'Balanced';
   String _selectedPriority = 'Balanced';
-  String _selectedGender = 'All'; // 'All', 'Girls', 'Boys'
-  String _selectedCategory = 'General'; // 'General', 'OBC', 'SC', 'ST', 'EWS'
+  String _selectedGenderUi = 'All'; // UI: 'All', 'Girls', 'Boys'
+  String _selectedCategoryUi = 'General (UR)'; // UI label
 
-  // ── Step 3: Results
+  // Step 3
   List<_PrefItem> _generatedSheet = [];
   bool _isGenerating = false;
   String? _errorMessage;
@@ -71,66 +84,87 @@ class _PreferenceGeneratorScreenState extends State<PreferenceGeneratorScreen> {
     _loadCourseList();
   }
 
-  // ─── Fetch distinct program names from du_cutoffs ──────────────────────────
+  // ─── Fetch ALL distinct program names (paginated) ─────────────────────────
   Future<void> _loadCourseList() async {
+    setState(() => _loadingCourses = true);
     try {
       final supabase = Supabase.instance.client;
 
-      // Fetch all distinct program names
-      final res = await supabase
-          .from('du_cutoffs')
-          .select('program_name')
-          .order('program_name');
+      // Paginate to get all program names — DB has 2094+ rows
+      final Set<String> programs = {};
+      int offset = 0;
+      const batch = 1000;
+      while (true) {
+        final res = await supabase
+            .from('du_cutoffs')
+            .select('program_name')
+            .range(offset, offset + batch - 1);
+        final list = res as List;
+        for (final r in list) {
+          final name = (r['program_name'] as String).trim();
+          // Skip B.A Programme combination rows — those are college-specific
+          if (!name.startsWith('B.A Program') &&
+              !name.startsWith('B.A. Program')) {
+            programs.add(name);
+          }
+        }
+        if (list.length < batch) break;
+        offset += batch;
+      }
 
-      final programs =
-          (res as List).map((r) => r['program_name'] as String).toSet().toList()
-            ..sort();
+      final sorted = programs.toList()..sort();
 
-      // Auto-categorise by keyword
+      // Auto-categorise
       final Map<String, List<String>> cats = {
         'Commerce & Management': [],
         'Sciences': [],
         'Arts & Humanities': [],
+        'Education & Vocational': [],
         'Other': [],
       };
 
-      for (final p in programs) {
-        final lower = p.toLowerCase();
-        if (lower.contains('b.com') ||
-            lower.contains('economics') ||
-            lower.contains('bms') ||
-            lower.contains('business') ||
-            lower.contains('fia') ||
-            lower.contains('commerce')) {
+      for (final p in sorted) {
+        final l = p.toLowerCase();
+        if (l.contains('b.com') ||
+            l.contains('economics') ||
+            l.contains('bms') ||
+            l.contains('bachelor of management') ||
+            l.contains('business') ||
+            l.contains('fia') ||
+            l.contains('financial investment')) {
           cats['Commerce & Management']!.add(p);
-        } else if (lower.contains('b.sc') ||
-            lower.contains('computer') ||
-            lower.contains('physics') ||
-            lower.contains('chemistry') ||
-            lower.contains('maths') ||
-            lower.contains('mathematics') ||
-            lower.contains('statistics') ||
-            lower.contains('botany') ||
-            lower.contains('zoology') ||
-            lower.contains('life science') ||
-            lower.contains('applied')) {
+        } else if (l.contains('b.sc') ||
+            l.contains('computer') ||
+            l.contains('physics') ||
+            l.contains('chemistry') ||
+            l.contains('mathematics') ||
+            l.contains('statistics') ||
+            l.contains('botany') ||
+            l.contains('zoology') ||
+            l.contains('life science') ||
+            l.contains('applied') ||
+            l.contains('electronics') ||
+            l.contains('instrumentation') ||
+            l.contains('biochemistry') ||
+            l.contains('microbiology') ||
+            l.contains('geology') ||
+            l.contains('polymer') ||
+            l.contains('b.tech')) {
           cats['Sciences']!.add(p);
-        } else if (lower.contains('b.a') ||
-            lower.contains('english') ||
-            lower.contains('history') ||
-            lower.contains('politic') ||
-            lower.contains('sociology') ||
-            lower.contains('psychology') ||
-            lower.contains('journalism') ||
-            lower.contains('geography') ||
-            lower.contains('programme')) {
+        } else if (l.contains('b.voc') ||
+            l.contains('b.el.ed') ||
+            l.contains('elementary education') ||
+            l.contains('vocational') ||
+            l.contains('bachelor of fine arts') ||
+            l.contains('bfa')) {
+          cats['Education & Vocational']!.add(p);
+        } else if (l.contains('b.a')) {
           cats['Arts & Humanities']!.add(p);
         } else {
           cats['Other']!.add(p);
         }
       }
 
-      // Remove empty categories
       cats.removeWhere((_, v) => v.isEmpty);
 
       if (mounted) {
@@ -149,7 +183,7 @@ class _PreferenceGeneratorScreenState extends State<PreferenceGeneratorScreen> {
     }
   }
 
-  // ─── Core ranking algorithm ────────────────────────────────────────────────
+  // ─── Core ranking algorithm ───────────────────────────────────────────────
   Future<void> _generatePreferences() async {
     setState(() {
       _currentStep = 2;
@@ -160,55 +194,100 @@ class _PreferenceGeneratorScreenState extends State<PreferenceGeneratorScreen> {
     try {
       final supabase = Supabase.instance.client;
 
-      // ── 1. Fetch all college details (NIRF, placements, campus) ─────────────
+      // Map UI category label → DB value
+      final dbCategory = _categoryDbMap[_selectedCategoryUi] ?? 'UR';
+
+      // ── 1. Fetch college details ──────────────────────────────────────────
       final collegesRes = await supabase.from('du_college_details').select();
-      final Map<String, DuCollegeDetails> collegeMap = {};
+      final Map<String, Map<String, dynamic>> collegeMap = {};
       for (final row in collegesRes as List) {
-        final c = DuCollegeDetails.fromJson(row);
-        collegeMap[c.collegeName.trim().toLowerCase()] = c;
+        final name = (row['college_name'] as String).trim().toLowerCase();
+        collegeMap[name] = row;
       }
 
-      // ── 2. Build cutoff query ────────────────────────────────────────────────
-      // Filter by selected programs AND category.
-      // Gender filter: if 'Girls' → gender = 'Female' / 'Girls',
-      //                if 'Boys'  → gender = 'Male' / 'Boys',
-      //                else       → no gender filter
+      // ── 2. Fetch ALL cutoffs (paginated) for selected programs + category ─
+      // DB gender values: 'Co-Ed' or 'Female'
+      // Male student → only 'Co-Ed'
+      // Female student → 'Co-Ed' AND 'Female'
+      // All → both
 
+      final List<Map<String, dynamic>> allCutoffs = [];
       final programsList = _selectedCourses.toList();
 
-      var query = supabase
-          .from('du_cutoffs')
-          .select('college_name, program_name, category, gender, cutoff_score')
-          .inFilter('program_name', programsList)
-          .eq('category', _selectedCategory);
-
-      // Gender filter
-      if (_selectedGender == 'Girls') {
-        query = query.or('gender.eq.Female,gender.eq.Co-Ed,gender.eq.Girl');
-      } else if (_selectedGender == 'Boys') {
-        query = query.or('gender.eq.Co-Ed,gender.eq.Boys,gender.eq.Boy');
+      // Supabase .inFilter has limits — chunk if large selection
+      const chunkSize = 50;
+      final chunks = <List<String>>[];
+      for (int i = 0; i < programsList.length; i += chunkSize) {
+        chunks.add(
+          programsList.sublist(
+            i,
+            i + chunkSize > programsList.length
+                ? programsList.length
+                : i + chunkSize,
+          ),
+        );
       }
 
-      final cutoffRes = await query;
+      for (final chunk in chunks) {
+        int offset = 0;
+        const batch = 1000;
+        while (true) {
+          var query = supabase
+              .from('du_cutoffs')
+              .select(
+                'college_name, college_name_canonical, program_name, category, gender, cutoff_score',
+              )
+              .inFilter('program_name', chunk)
+              .eq('category', dbCategory)
+              .range(offset, offset + batch - 1);
 
-      // ── 3. Collapse duplicates: keep the best cutoff per college+program pair ─
+          // Gender filter using DB values
+          if (_selectedGenderUi == 'Boys') {
+            query = supabase
+                .from('du_cutoffs')
+                .select(
+                  'college_name, college_name_canonical, program_name, category, gender, cutoff_score',
+                )
+                .inFilter('program_name', chunk)
+                .eq('category', dbCategory)
+                .eq('gender', 'Co-Ed')
+                .range(offset, offset + batch - 1);
+          }
+          // Girls and All: include both Co-Ed and Female — no filter needed
+          // (for Girls we show both, let college details tell them it's women's)
+
+          final res = await query;
+          final list = List<Map<String, dynamic>>.from(res);
+          allCutoffs.addAll(list);
+          if (list.length < batch) break;
+          offset += batch;
+        }
+      }
+
+      // ── 3. Collapse: best (highest) cutoff per canonical college + program ─
       final Map<String, _PrefItem> bestMap = {};
 
-      for (final row in cutoffRes as List) {
-        final collegeName = (row['college_name'] as String).trim();
+      for (final row in allCutoffs) {
+        // Use canonical name for matching with college_details
+        final canonicalName =
+            (row['college_name_canonical'] as String? ??
+                    row['college_name'] as String)
+                .trim();
         final programName = (row['program_name'] as String).trim();
-        final cutoff = (row['cutoff_score'] is num)
-            ? (row['cutoff_score'] as num).toDouble()
-            : double.tryParse(row['cutoff_score'].toString()) ?? 0.0;
+        final gender = (row['gender'] as String? ?? 'Co-Ed').trim();
+        final cutoff = (row['cutoff_score'] as num).toDouble();
 
         if (cutoff <= 0) continue;
 
-        final key = '${collegeName.toLowerCase()}|||$programName';
-        final details = collegeMap[collegeName.toLowerCase()];
+        // For Boys: skip Female colleges
+        if (_selectedGenderUi == 'Boys' && gender == 'Female') continue;
 
-        // Campus preference filter (hard-filter if not Balanced)
+        final details = collegeMap[canonicalName.toLowerCase()];
+
+        // Campus filter
         if (_selectedCampus != 'Balanced') {
-          final campusType = details?.campusType?.toLowerCase() ?? '';
+          final campusType = (details?['campus_type'] as String? ?? '')
+              .toLowerCase();
           if (_selectedCampus == 'North Campus' &&
               !campusType.contains('north'))
             continue;
@@ -217,42 +296,40 @@ class _PreferenceGeneratorScreenState extends State<PreferenceGeneratorScreen> {
             continue;
         }
 
+        final key = '${canonicalName.toLowerCase()}|||$programName';
         final existing = bestMap[key];
-        // For same key, keep the row with the highest cutoff
-        // (highest = most competitive = most prestigious cutoff scenario)
+
+        // Keep highest cutoff (most competitive = most prestigious)
         if (existing == null || cutoff > existing.cutoffScore) {
           bestMap[key] = _PrefItem(
-            collegeName: collegeName,
+            collegeName: canonicalName,
             programName: programName,
-            campus: details?.campusType ?? 'Off Campus',
-            nirfRank: details?.nirfRanking,
-            placementAvg: details?.placementAvg?.toDouble(),
-            placementHighest: details?.placementHighest?.toDouble(),
+            campus: details?['campus_type'] as String? ?? 'Off Campus',
+            nirfRank: details?['nirf_ranking'] as int?,
+            placementAvg: (details?['placement_avg'] as num?)?.toDouble(),
+            placementHighest: (details?['placement_highest'] as num?)
+                ?.toDouble(),
             cutoffScore: cutoff,
-            naacGrade: details?.naacGrade,
+            naacGrade: details?['naac_grade'] as String?,
             score: 0,
           );
         }
       }
 
-      // ── 4. Score every item ──────────────────────────────────────────────────
+      // ── 4. Score ──────────────────────────────────────────────────────────
       final items = bestMap.values.toList();
 
-      // Normalise NIRF: rank 1 → 100 pts, rank 100 → 1 pt, null → 0
-      double _nirfScore(int? rank) {
+      double nirfScore(int? rank) {
         if (rank == null || rank <= 0) return 0;
-        return (101 - rank.clamp(1, 100)).toDouble(); // 1→100, 100→1
+        return (101 - rank.clamp(1, 100)).toDouble();
       }
 
-      // Normalise placement avg: 12 LPA → 100, 0 → 0 (cap at 12)
-      double _placementScore(double? avg) =>
+      double placementScore(double? avg) =>
           ((avg ?? 0) / 12.0 * 100).clamp(0.0, 100.0);
 
-      // Normalise cutoff: 800 → 100, 0 → 0
-      double _cutoffScore(double c) => (c / 800.0 * 100).clamp(0.0, 100.0);
+      double cutoffScore(double c) => (c / 800.0 * 100).clamp(0.0, 100.0);
 
-      // NAAC grade bonus: A++ → 10, A+ → 7, A → 4, else 0
-      double _naacBonus(String? g) {
+      double naacBonus(String? g) {
         switch (g) {
           case 'A++':
             return 10;
@@ -265,8 +342,7 @@ class _PreferenceGeneratorScreenState extends State<PreferenceGeneratorScreen> {
         }
       }
 
-      // Campus bonus when user picks a campus explicitly
-      double _campusBonus(String campus) {
+      double campusBonus(String campus) {
         if (_selectedCampus == 'Balanced') return 0;
         final c = campus.toLowerCase();
         if (_selectedCampus == 'North Campus' && c.contains('north')) return 15;
@@ -275,28 +351,30 @@ class _PreferenceGeneratorScreenState extends State<PreferenceGeneratorScreen> {
       }
 
       for (final item in items) {
-        final nirf = _nirfScore(item.nirfRank);
-        final place = _placementScore(item.placementAvg);
-        final cut = _cutoffScore(item.cutoffScore);
-        final naac = _naacBonus(item.naacGrade);
-        final campus = _campusBonus(item.campus);
+        final nirf = nirfScore(item.nirfRank);
+        final place = placementScore(item.placementAvg);
+        final cut = cutoffScore(item.cutoffScore);
+        final naac = naacBonus(item.naacGrade);
+        final campus = campusBonus(item.campus);
 
         double base;
         switch (_selectedPriority) {
           case 'NIRF Ranking':
             base = nirf * 0.55 + place * 0.20 + cut * 0.15 + naac;
+            break;
           case 'Placements':
             base = nirf * 0.15 + place * 0.60 + cut * 0.15 + naac;
+            break;
           case 'Cutoffs':
             base = nirf * 0.15 + place * 0.15 + cut * 0.60 + naac;
+            break;
           default: // Balanced
             base = nirf * 0.35 + place * 0.35 + cut * 0.20 + naac;
         }
-
         item.score = base + campus;
       }
 
-      // ── 5. Sort descending by score ──────────────────────────────────────────
+      // ── 5. Sort ───────────────────────────────────────────────────────────
       items.sort((a, b) => b.score.compareTo(a.score));
 
       if (mounted) {
@@ -305,11 +383,11 @@ class _PreferenceGeneratorScreenState extends State<PreferenceGeneratorScreen> {
           _isGenerating = false;
         });
       }
-    } catch (e) {
+    } catch (e, st) {
       if (mounted) {
         setState(() {
           _isGenerating = false;
-          _errorMessage = 'Generation failed: $e';
+          _errorMessage = 'Generation failed: $e\n$st';
         });
       }
     }
@@ -340,7 +418,6 @@ class _PreferenceGeneratorScreenState extends State<PreferenceGeneratorScreen> {
     );
   }
 
-  // ─── App Bar ───────────────────────────────────────────────────────────────
   PreferredSizeWidget _buildAppBar(ThemeData theme, bool isDark) {
     return AppBar(
       backgroundColor: isDark ? const Color(0xFF161C24) : Colors.white,
@@ -384,7 +461,6 @@ class _PreferenceGeneratorScreenState extends State<PreferenceGeneratorScreen> {
     );
   }
 
-  // ─── Step Indicator ────────────────────────────────────────────────────────
   Widget _buildStepIndicator(bool isDark, ThemeData theme) {
     final steps = ['Courses', 'Preferences', 'Your Sheet'];
     return Container(
@@ -397,7 +473,6 @@ class _PreferenceGeneratorScreenState extends State<PreferenceGeneratorScreen> {
           return Expanded(
             child: Row(
               children: [
-                // Circle
                 AnimatedContainer(
                   duration: const Duration(milliseconds: 300),
                   width: 30,
@@ -438,22 +513,15 @@ class _PreferenceGeneratorScreenState extends State<PreferenceGeneratorScreen> {
                 ),
                 const SizedBox(width: 6),
                 Expanded(
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Text(
-                        steps[i],
-                        style: GoogleFonts.outfit(
-                          fontSize: 12,
-                          fontWeight: active
-                              ? FontWeight.w700
-                              : FontWeight.w500,
-                          color: active
-                              ? theme.colorScheme.primary
-                              : (done ? Colors.green : Colors.grey),
-                        ),
-                      ),
-                    ],
+                  child: Text(
+                    steps[i],
+                    style: GoogleFonts.outfit(
+                      fontSize: 12,
+                      fontWeight: active ? FontWeight.w700 : FontWeight.w500,
+                      color: active
+                          ? theme.colorScheme.primary
+                          : (done ? Colors.green : Colors.grey),
+                    ),
                   ),
                 ),
                 if (i < steps.length - 1)
@@ -473,7 +541,6 @@ class _PreferenceGeneratorScreenState extends State<PreferenceGeneratorScreen> {
     );
   }
 
-  // ─── Step Content Router ───────────────────────────────────────────────────
   Widget _buildStepContent(ThemeData theme, bool isDark) {
     switch (_currentStep) {
       case 0:
@@ -487,7 +554,7 @@ class _PreferenceGeneratorScreenState extends State<PreferenceGeneratorScreen> {
     }
   }
 
-  // ─── STEP 1: Course Selection ──────────────────────────────────────────────
+  // ─── STEP 1: Course Selection ─────────────────────────────────────────────
   Widget _buildCourseStep(ThemeData theme, bool isDark) {
     if (_loadingCourses) {
       return Center(
@@ -497,7 +564,7 @@ class _PreferenceGeneratorScreenState extends State<PreferenceGeneratorScreen> {
             CircularProgressIndicator(color: theme.colorScheme.primary),
             const SizedBox(height: 16),
             Text(
-              'Loading available programs…',
+              'Loading all DU programs…',
               style: GoogleFonts.outfit(color: Colors.grey),
             ),
           ],
@@ -525,10 +592,7 @@ class _PreferenceGeneratorScreenState extends State<PreferenceGeneratorScreen> {
               ),
               const SizedBox(height: 20),
               ElevatedButton.icon(
-                onPressed: () {
-                  setState(() => _loadingCourses = true);
-                  _loadCourseList();
-                },
+                onPressed: _loadCourseList,
                 icon: const Icon(LucideIcons.refreshCw, size: 16),
                 label: const Text('Retry'),
               ),
@@ -545,7 +609,6 @@ class _PreferenceGeneratorScreenState extends State<PreferenceGeneratorScreen> {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          // Header
           Padding(
             padding: const EdgeInsets.fromLTRB(20, 20, 20, 8),
             child: Column(
@@ -560,48 +623,39 @@ class _PreferenceGeneratorScreenState extends State<PreferenceGeneratorScreen> {
                 ),
                 const SizedBox(height: 4),
                 Text(
-                  'Select every program you want considered. More selections = richer results.',
+                  'Select every program you want considered. More = richer results.',
                   style: GoogleFonts.outfit(fontSize: 12, color: Colors.grey),
                 ),
                 const SizedBox(height: 10),
-                // Selected count chip
                 if (_selectedCourses.isNotEmpty)
-                  Wrap(
-                    spacing: 8,
-                    children: [
-                      Chip(
-                        avatar: Icon(
-                          LucideIcons.checkCircle2,
-                          size: 14,
-                          color: theme.colorScheme.primary,
-                        ),
-                        label: Text(
-                          '${_selectedCourses.length} selected',
-                          style: GoogleFonts.outfit(
-                            fontSize: 12,
-                            color: theme.colorScheme.primary,
-                            fontWeight: FontWeight.w600,
-                          ),
-                        ),
-                        backgroundColor: theme.colorScheme.primary.withOpacity(
-                          0.08,
-                        ),
-                        side: BorderSide.none,
-                        deleteIcon: Icon(
-                          LucideIcons.x,
-                          size: 14,
-                          color: theme.colorScheme.primary,
-                        ),
-                        onDeleted: () =>
-                            setState(() => _selectedCourses.clear()),
+                  Chip(
+                    avatar: Icon(
+                      LucideIcons.checkCircle2,
+                      size: 14,
+                      color: theme.colorScheme.primary,
+                    ),
+                    label: Text(
+                      '${_selectedCourses.length} selected',
+                      style: GoogleFonts.outfit(
+                        fontSize: 12,
+                        color: theme.colorScheme.primary,
+                        fontWeight: FontWeight.w600,
                       ),
-                    ],
+                    ),
+                    backgroundColor: theme.colorScheme.primary.withOpacity(
+                      0.08,
+                    ),
+                    side: BorderSide.none,
+                    deleteIcon: Icon(
+                      LucideIcons.x,
+                      size: 14,
+                      color: theme.colorScheme.primary,
+                    ),
+                    onDeleted: () => setState(() => _selectedCourses.clear()),
                   ),
               ],
             ),
           ),
-
-          // Tabs
           TabBar(
             isScrollable: true,
             tabAlignment: TabAlignment.start,
@@ -618,11 +672,9 @@ class _PreferenceGeneratorScreenState extends State<PreferenceGeneratorScreen> {
               final count = _courseCategories[c]!
                   .where((p) => _selectedCourses.contains(p))
                   .length;
-              return Tab(text: count > 0 ? '$c  ($count)' : c);
+              return Tab(text: count > 0 ? '$c ($count)' : c);
             }).toList(),
           ),
-
-          // Tab content
           Expanded(
             child: TabBarView(
               children: cats.map((cat) {
@@ -638,7 +690,7 @@ class _PreferenceGeneratorScreenState extends State<PreferenceGeneratorScreen> {
                       category: cat,
                       isSelected: isSel,
                       primaryColor: theme.colorScheme.primary,
-                      isDark: theme.brightness == Brightness.dark,
+                      isDark: isDark,
                       onToggle: (val) => setState(() {
                         if (val) {
                           _selectedCourses.add(course);
@@ -657,14 +709,13 @@ class _PreferenceGeneratorScreenState extends State<PreferenceGeneratorScreen> {
     );
   }
 
-  // ─── STEP 2: Preferences ───────────────────────────────────────────────────
+  // ─── STEP 2: Preferences ─────────────────────────────────────────────────
   Widget _buildPreferencesStep(ThemeData theme, bool isDark) {
     return SingleChildScrollView(
       padding: const EdgeInsets.fromLTRB(20, 20, 20, 100),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          // Header
           Text(
             'Personalise Your Ranking',
             style: GoogleFonts.outfit(
@@ -677,50 +728,40 @@ class _PreferenceGeneratorScreenState extends State<PreferenceGeneratorScreen> {
             'These settings control the mathematical weights used to rank colleges.',
             style: GoogleFonts.outfit(fontSize: 12, color: Colors.grey),
           ),
-
           const SizedBox(height: 28),
 
-          // ── Category
+          // Category — use correct labels mapping to DB values
           _PrefSection(
             icon: LucideIcons.users,
             title: 'Admission Category',
             subtitle: 'Cutoffs are fetched for this category',
             child: _ChipSelector(
-              options: const [
-                'General',
-                'OBC',
-                'OBC (NCL)',
-                'SC',
-                'ST',
-                'EWS',
-                'PwD',
-              ],
-              selected: _selectedCategory,
-              onSelect: (v) => setState(() => _selectedCategory = v),
+              options: _categoryDbMap.keys.toList(),
+              selected: _selectedCategoryUi,
+              onSelect: (v) => setState(() => _selectedCategoryUi = v),
               primaryColor: theme.colorScheme.primary,
               isDark: isDark,
             ),
           ),
-
           const SizedBox(height: 20),
 
-          // ── Gender
+          // Gender
           _PrefSection(
             icon: LucideIcons.userCheck,
-            title: 'Gender Preference',
-            subtitle: 'Filter for co-ed / girls-only / boys-only colleges',
+            title: 'Gender',
+            subtitle:
+                'Boys: Co-Ed colleges only  ·  Girls & All: includes Women\'s colleges',
             child: _ChipSelector(
               options: const ['All', 'Girls', 'Boys'],
-              selected: _selectedGender,
-              onSelect: (v) => setState(() => _selectedGender = v),
+              selected: _selectedGenderUi,
+              onSelect: (v) => setState(() => _selectedGenderUi = v),
               primaryColor: theme.colorScheme.primary,
               isDark: isDark,
             ),
           ),
-
           const SizedBox(height: 20),
 
-          // ── Campus
+          // Campus
           _PrefSection(
             icon: LucideIcons.mapPin,
             title: 'Campus Preference',
@@ -733,10 +774,9 @@ class _PreferenceGeneratorScreenState extends State<PreferenceGeneratorScreen> {
               isDark: isDark,
             ),
           ),
-
           const SizedBox(height: 20),
 
-          // ── Primary Metric
+          // Priority
           _PrefSection(
             icon: LucideIcons.sliders,
             title: 'Primary Evaluation Metric',
@@ -794,9 +834,8 @@ class _PreferenceGeneratorScreenState extends State<PreferenceGeneratorScreen> {
     );
   }
 
-  // ─── STEP 3: Results ───────────────────────────────────────────────────────
+  // ─── STEP 3: Results ──────────────────────────────────────────────────────
   Widget _buildResultsStep(ThemeData theme, bool isDark) {
-    // Loading state
     if (_isGenerating) {
       return Center(
         child: Column(
@@ -820,7 +859,7 @@ class _PreferenceGeneratorScreenState extends State<PreferenceGeneratorScreen> {
             ),
             const SizedBox(height: 8),
             Text(
-              'Scoring ${_selectedCourses.length} programs across DU colleges',
+              'Scoring ${_selectedCourses.length} programs across DU',
               style: GoogleFonts.outfit(fontSize: 12, color: Colors.grey),
             ),
           ],
@@ -828,7 +867,6 @@ class _PreferenceGeneratorScreenState extends State<PreferenceGeneratorScreen> {
       );
     }
 
-    // Error state
     if (_errorMessage != null) {
       return Center(
         child: Padding(
@@ -857,7 +895,10 @@ class _PreferenceGeneratorScreenState extends State<PreferenceGeneratorScreen> {
               ),
               const SizedBox(height: 20),
               ElevatedButton.icon(
-                onPressed: () => setState(() => _currentStep = 1),
+                onPressed: () => setState(() {
+                  _currentStep = 1;
+                  _errorMessage = null;
+                }),
                 icon: const Icon(LucideIcons.arrowLeft, size: 16),
                 label: const Text('Go Back'),
               ),
@@ -867,7 +908,6 @@ class _PreferenceGeneratorScreenState extends State<PreferenceGeneratorScreen> {
       );
     }
 
-    // Empty state
     if (_generatedSheet.isEmpty) {
       return Center(
         child: Padding(
@@ -886,7 +926,9 @@ class _PreferenceGeneratorScreenState extends State<PreferenceGeneratorScreen> {
               ),
               const SizedBox(height: 10),
               Text(
-                'No DU colleges offer the selected programs for the $_selectedCategory category. Try a different category, gender filter, or add more courses.',
+                'No DU colleges offer the selected programs for '
+                '$_selectedCategoryUi category. Try a different category, '
+                'gender filter, or add more courses.',
                 textAlign: TextAlign.center,
                 style: GoogleFonts.outfit(
                   color: Colors.grey,
@@ -906,10 +948,8 @@ class _PreferenceGeneratorScreenState extends State<PreferenceGeneratorScreen> {
       );
     }
 
-    // Results list
     return Column(
       children: [
-        // Summary banner
         Container(
           padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
           color: theme.colorScheme.primary.withOpacity(0.06),
@@ -927,8 +967,7 @@ class _PreferenceGeneratorScreenState extends State<PreferenceGeneratorScreen> {
                     style: GoogleFonts.outfit(fontSize: 12, height: 1.4),
                     children: [
                       TextSpan(
-                        text:
-                            '${_generatedSheet.length} combinations found  ·  ',
+                        text: '${_generatedSheet.length} combinations  ·  ',
                         style: TextStyle(
                           color: theme.colorScheme.primary,
                           fontWeight: FontWeight.w700,
@@ -936,7 +975,7 @@ class _PreferenceGeneratorScreenState extends State<PreferenceGeneratorScreen> {
                       ),
                       TextSpan(
                         text:
-                            '$_selectedCategory · $_selectedCampus · $_selectedPriority priority',
+                            '$_selectedCategoryUi · $_selectedCampus · $_selectedPriority',
                         style: const TextStyle(color: Colors.grey),
                       ),
                     ],
@@ -946,8 +985,6 @@ class _PreferenceGeneratorScreenState extends State<PreferenceGeneratorScreen> {
             ],
           ),
         ),
-
-        // Drag hint
         Container(
           padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
           color: Colors.amber.withOpacity(0.06),
@@ -972,8 +1009,6 @@ class _PreferenceGeneratorScreenState extends State<PreferenceGeneratorScreen> {
             ],
           ),
         ),
-
-        // Reorderable list
         Expanded(
           child: ReorderableListView.builder(
             padding: const EdgeInsets.fromLTRB(16, 12, 16, 16),
@@ -997,8 +1032,6 @@ class _PreferenceGeneratorScreenState extends State<PreferenceGeneratorScreen> {
             },
           ),
         ),
-
-        // Action row
         Container(
           padding: const EdgeInsets.fromLTRB(16, 10, 16, 20),
           color: theme.cardColor,
@@ -1039,7 +1072,6 @@ class _PreferenceGeneratorScreenState extends State<PreferenceGeneratorScreen> {
     );
   }
 
-  // ─── Bottom Navigation ─────────────────────────────────────────────────────
   Widget _buildBottomNav(ThemeData theme) {
     final isStep0Empty = _currentStep == 0 && _selectedCourses.isEmpty;
     return Container(
@@ -1102,12 +1134,11 @@ class _PreferenceGeneratorScreenState extends State<PreferenceGeneratorScreen> {
     }
   }
 
-  // ─── Export / Save ─────────────────────────────────────────────────────────
   void _exportToClipboard() {
     final buf = StringBuffer();
-    buf.writeln('🎓 DUVerse CSAS Preference Sheet');
+    buf.writeln('🎓 DU CSAS Preference Sheet');
     buf.writeln(
-      'Category: $_selectedCategory  |  Campus: $_selectedCampus  |  Priority: $_selectedPriority',
+      'Category: $_selectedCategoryUi  |  Campus: $_selectedCampus  |  Priority: $_selectedPriority',
     );
     buf.writeln('─' * 60);
     for (int i = 0; i < _generatedSheet.length; i++) {
@@ -1152,7 +1183,6 @@ class _PreferenceGeneratorScreenState extends State<PreferenceGeneratorScreen> {
         )
         .toList();
 
-    // Show loading overlay
     if (mounted) {
       showDialog(
         context: context,
@@ -1171,7 +1201,7 @@ class _PreferenceGeneratorScreenState extends State<PreferenceGeneratorScreen> {
     );
 
     if (mounted) {
-      Navigator.pop(context); // close loading
+      Navigator.pop(context);
       showDialog(
         context: context,
         builder: (_) => AlertDialog(
@@ -1224,16 +1254,13 @@ class _PreferenceGeneratorScreenState extends State<PreferenceGeneratorScreen> {
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
-// EXTRACTED WIDGETS (kept private / file-scoped)
+// REUSABLE WIDGETS
 // ─────────────────────────────────────────────────────────────────────────────
 
-/// Animated course selection card
 class _CourseCard extends StatelessWidget {
-  final String course;
-  final String category;
-  final bool isSelected;
+  final String course, category;
+  final bool isSelected, isDark;
   final Color primaryColor;
-  final bool isDark;
   final void Function(bool) onToggle;
 
   const _CourseCard({
@@ -1328,11 +1355,9 @@ class _CourseCard extends StatelessWidget {
   }
 }
 
-/// Preference section wrapper
 class _PrefSection extends StatelessWidget {
   final IconData icon;
-  final String title;
-  final String subtitle;
+  final String title, subtitle;
   final Widget child;
 
   const _PrefSection({
@@ -1378,7 +1403,6 @@ class _PrefSection extends StatelessWidget {
   }
 }
 
-/// Horizontal chip selector
 class _ChipSelector extends StatelessWidget {
   final List<String> options;
   final String selected;
@@ -1436,7 +1460,6 @@ class _ChipSelector extends StatelessWidget {
   }
 }
 
-/// Metric priority tile
 class _MetricTile extends StatelessWidget {
   final String title, desc, value, selected;
   final IconData icon;
@@ -1522,7 +1545,6 @@ class _MetricTile extends StatelessWidget {
   }
 }
 
-/// Result card (used inside ReorderableListView — must have a Key)
 class _ResultCard extends StatelessWidget {
   final _PrefItem item;
   final int rank;
@@ -1538,21 +1560,13 @@ class _ResultCard extends StatelessWidget {
   });
 
   Color _rankColor() {
-    if (rank == 1) return const Color(0xFFFFD700); // gold
-    if (rank == 2) return const Color(0xFFC0C0C0); // silver
-    if (rank == 3) return const Color(0xFFCD7F32); // bronze
+    if (rank == 1) return const Color(0xFFFFD700);
+    if (rank == 2) return const Color(0xFFC0C0C0);
+    if (rank == 3) return const Color(0xFFCD7F32);
     return primaryColor.withOpacity(0.15);
   }
 
-  Color _rankTextColor() {
-    if (rank <= 3) return Colors.white;
-    return primaryColor;
-  }
-
-  String _naacLabel(String? g) {
-    if (g == null) return '';
-    return 'NAAC $g';
-  }
+  Color _rankTextColor() => rank <= 3 ? Colors.white : primaryColor;
 
   @override
   Widget build(BuildContext context) {
@@ -1584,7 +1598,6 @@ class _ResultCard extends StatelessWidget {
         child: Row(
           crossAxisAlignment: CrossAxisAlignment.center,
           children: [
-            // Rank badge
             Container(
               width: 36,
               height: 36,
@@ -1603,8 +1616,6 @@ class _ResultCard extends StatelessWidget {
               ),
             ),
             const SizedBox(width: 14),
-
-            // Details
             Expanded(
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
@@ -1630,7 +1641,6 @@ class _ResultCard extends StatelessWidget {
                     overflow: TextOverflow.ellipsis,
                   ),
                   const SizedBox(height: 6),
-                  // Tag row
                   Wrap(
                     spacing: 6,
                     runSpacing: 4,
@@ -1644,7 +1654,7 @@ class _ResultCard extends StatelessWidget {
                       if (item.cutoffScore > 0)
                         _Tag(
                           icon: LucideIcons.trendingUp,
-                          label: '${item.cutoffScore.toStringAsFixed(0)}',
+                          label: item.cutoffScore.toStringAsFixed(0),
                           color: Colors.blue.shade600,
                         ),
                       if (item.placementAvg != null && item.placementAvg! > 0)
@@ -1661,7 +1671,7 @@ class _ResultCard extends StatelessWidget {
                       if (item.naacGrade != null)
                         _Tag(
                           icon: LucideIcons.star,
-                          label: _naacLabel(item.naacGrade),
+                          label: 'NAAC ${item.naacGrade}',
                           color: Colors.purple.shade500,
                         ),
                     ],
@@ -1682,7 +1692,6 @@ class _ResultCard extends StatelessWidget {
   }
 }
 
-/// Small inline tag badge
 class _Tag extends StatelessWidget {
   final IconData icon;
   final String label;

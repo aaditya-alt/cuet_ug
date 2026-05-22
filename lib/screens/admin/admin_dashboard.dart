@@ -1280,98 +1280,435 @@ class _AdminDashboardState extends State<AdminDashboard>
     }
   }
 
+  Future<void> _toggleEventField(int id, String field, bool newValue) async {
+    try {
+      await Supabase.instance.client
+          .from('csas_timeline')
+          .update({field: newValue})
+          .eq('id', id);
+      await _loadTimelineEvents();
+    } catch (e) {
+      if (mounted)
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(SnackBar(content: Text('Update failed: $e')));
+    }
+  }
+
+  // ── Paste these controllers & state variables in your admin State class ──────
+
+  // Timeline
+
+  final _tlTitleController = TextEditingController();
+  final _tlDateController = TextEditingController();
+  final _tlTimeController = TextEditingController();
+  final _tlDescController = TextEditingController();
+  final _tlSortController = TextEditingController(text: '0');
+  final _tlLinkUrlController = TextEditingController();
+  final _tlLinkLabelController = TextEditingController();
+  String _tlCategory = 'General';
+  String _tlIconName = 'calendar';
+  bool _tlIsImportant = false;
+
+  int? _editingEventId; // null = creating new, non-null = editing existing
+  List<Map<String, dynamic>> _allTimelineEvents = [];
+  bool _loadingTimelineEvents = true;
+
+  Future<void> _loadTimelineEvents() async {
+    setState(() => _loadingTimelineEvents = true);
+    try {
+      final res = await Supabase.instance.client
+          .from('csas_timeline')
+          .select()
+          .order('sort_order');
+      setState(() {
+        _allTimelineEvents = List<Map<String, dynamic>>.from(res);
+        _loadingTimelineEvents = false;
+      });
+    } catch (e) {
+      setState(() => _loadingTimelineEvents = false);
+    }
+  }
+
+  void _populateFormForEdit(Map<String, dynamic> event) {
+    setState(() {
+      _editingEventId = event['id'] as int;
+      _tlTitleController.text = event['title'] ?? '';
+      _tlDateController.text = event['event_date'] ?? '';
+      _tlTimeController.text = event['event_time'] ?? '';
+      _tlDescController.text = event['description'] ?? '';
+      _tlSortController.text = (event['sort_order'] ?? 0).toString();
+      _tlLinkUrlController.text = event['link_url'] ?? '';
+      _tlLinkLabelController.text = event['link_label'] ?? '';
+      _tlCategory = event['category'] ?? 'General';
+      _tlIconName = event['icon_name'] ?? 'calendar';
+      _tlIsImportant = event['is_important'] ?? false;
+    });
+  }
+
+  void _clearTimelineForm() {
+    setState(() => _editingEventId = null);
+    _tlTitleController.clear();
+    _tlDateController.clear();
+    _tlTimeController.clear();
+    _tlDescController.clear();
+    _tlSortController.text = '0';
+    _tlLinkUrlController.clear();
+    _tlLinkLabelController.clear();
+    _tlCategory = 'General';
+    _tlIconName = 'calendar';
+    _tlIsImportant = false;
+  }
+
+  Future<void> _saveTimelineEvent() async {
+    if (!_timelineFormKey.currentState!.validate()) return;
+    setState(() => _isPublishingTimeline = true);
+
+    final payload = {
+      'title': _tlTitleController.text.trim(),
+      'event_date': _tlDateController.text.trim(),
+      'event_time': _tlTimeController.text.trim(),
+      'description': _tlDescController.text.trim(),
+      'sort_order': int.tryParse(_tlSortController.text) ?? 0,
+      'category': _tlCategory,
+      'icon_name': _tlIconName,
+      'is_important': _tlIsImportant,
+      'link_url': _tlLinkUrlController.text.trim().isEmpty
+          ? null
+          : _tlLinkUrlController.text.trim(),
+      'link_label': _tlLinkLabelController.text.trim().isEmpty
+          ? null
+          : _tlLinkLabelController.text.trim(),
+      'is_active': true,
+    };
+
+    try {
+      if (_editingEventId != null) {
+        await Supabase.instance.client
+            .from('csas_timeline')
+            .update(payload)
+            .eq('id', _editingEventId!);
+        if (mounted)
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(
+              content: Text('✅ Event updated!'),
+              backgroundColor: Colors.green,
+            ),
+          );
+      } else {
+        await Supabase.instance.client.from('csas_timeline').insert({
+          ...payload,
+          'is_completed': false,
+        });
+        if (mounted)
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(
+              content: Text('✅ Event added!'),
+              backgroundColor: Colors.green,
+            ),
+          );
+      }
+      _clearTimelineForm();
+      await _loadTimelineEvents();
+    } catch (e) {
+      if (mounted)
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Error: $e'), backgroundColor: Colors.red),
+        );
+    } finally {
+      if (mounted) setState(() => _isPublishingTimeline = false);
+    }
+  }
+
+  Future<void> _deleteTimelineEvent(int id) async {
+    final confirm = await showDialog<bool>(
+      context: context,
+      builder: (_) => AlertDialog(
+        title: const Text('Delete Event?'),
+        content: const Text('This will permanently remove the timeline event.'),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context, false),
+            child: const Text('Cancel'),
+          ),
+          TextButton(
+            onPressed: () => Navigator.pop(context, true),
+            child: const Text('Delete', style: TextStyle(color: Colors.red)),
+          ),
+        ],
+      ),
+    );
+    if (confirm != true) return;
+    try {
+      await Supabase.instance.client
+          .from('csas_timeline')
+          .delete()
+          .eq('id', id);
+      await _loadTimelineEvents();
+    } catch (e) {
+      if (mounted)
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(SnackBar(content: Text('Delete failed: $e')));
+    }
+  }
+
   Widget _buildTimelineTab(ThemeData theme) {
+    const categories = [
+      'General',
+      'Registration',
+      'Choice Filling',
+      'Allotment',
+      'Fees',
+    ];
+    const icons = [
+      'calendar',
+      'user-plus',
+      'credit-card',
+      'list-ordered',
+      'lock',
+      'eye',
+      'award',
+      'banknote',
+      'refresh-cw',
+      'flag',
+      'check-circle-2',
+      'file-text',
+      'alert-triangle',
+    ];
+
     return SingleChildScrollView(
-      padding: const EdgeInsets.all(24),
+      padding: const EdgeInsets.all(20),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Text(
-            'Add Timeline Event',
-            style: GoogleFonts.outfit(
-              fontSize: 20,
-              fontWeight: FontWeight.bold,
-            ),
+          // ── FORM SECTION ──────────────────────────────────────────────────
+          Row(
+            children: [
+              Icon(
+                _editingEventId != null
+                    ? LucideIcons.edit3
+                    : LucideIcons.calendarPlus,
+                color: theme.colorScheme.primary,
+              ),
+              const SizedBox(width: 10),
+              Text(
+                _editingEventId != null
+                    ? 'Edit Event #$_editingEventId'
+                    : 'Add Timeline Event',
+                style: GoogleFonts.outfit(
+                  fontSize: 18,
+                  fontWeight: FontWeight.bold,
+                ),
+              ),
+              const Spacer(),
+              if (_editingEventId != null)
+                TextButton.icon(
+                  onPressed: _clearTimelineForm,
+                  icon: const Icon(LucideIcons.x, size: 14),
+                  label: const Text('Cancel Edit'),
+                ),
+            ],
           ),
           const SizedBox(height: 16),
+
           Card(
+            shape: RoundedRectangleBorder(
+              borderRadius: BorderRadius.circular(16),
+            ),
             child: Padding(
-              padding: const EdgeInsets.all(16),
+              padding: const EdgeInsets.all(20),
               child: Form(
                 key: _timelineFormKey,
                 child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
+                    // Title
                     TextFormField(
-                      controller: _timelineTitleController,
+                      controller: _tlTitleController,
                       decoration: const InputDecoration(
-                        labelText: 'Event Title',
+                        labelText: 'Event Title *',
                         border: OutlineInputBorder(),
                       ),
                       validator: (v) =>
-                          v == null || v.isEmpty ? 'Required' : null,
+                          (v == null || v.isEmpty) ? 'Required' : null,
                     ),
-                    const SizedBox(height: 16),
+                    const SizedBox(height: 14),
+
+                    // Date + Time
                     Row(
                       children: [
                         Expanded(
                           child: TextFormField(
-                            controller: _timelineDateController,
+                            controller: _tlDateController,
                             decoration: const InputDecoration(
-                              labelText: 'Date (e.g. 28 May 2026)',
+                              labelText: 'Date (e.g. 28 May 2026) *',
                               border: OutlineInputBorder(),
+                              prefixIcon: Icon(LucideIcons.calendar, size: 16),
                             ),
                             validator: (v) =>
-                                v == null || v.isEmpty ? 'Required' : null,
+                                (v == null || v.isEmpty) ? 'Required' : null,
                           ),
                         ),
-                        const SizedBox(width: 16),
+                        const SizedBox(width: 12),
                         Expanded(
                           child: TextFormField(
-                            controller: _timelineTimeController,
+                            controller: _tlTimeController,
                             decoration: const InputDecoration(
                               labelText: 'Time (e.g. 11:00 AM)',
+                              border: OutlineInputBorder(),
+                              prefixIcon: Icon(LucideIcons.clock, size: 16),
+                            ),
+                          ),
+                        ),
+                      ],
+                    ),
+                    const SizedBox(height: 14),
+
+                    // Description
+                    TextFormField(
+                      controller: _tlDescController,
+                      maxLines: 3,
+                      decoration: const InputDecoration(
+                        labelText: 'Description',
+                        border: OutlineInputBorder(),
+                        alignLabelWithHint: true,
+                      ),
+                    ),
+                    const SizedBox(height: 14),
+
+                    // Category + Sort Order
+                    Row(
+                      children: [
+                        Expanded(
+                          flex: 2,
+                          child: DropdownButtonFormField<String>(
+                            value: _tlCategory,
+                            decoration: const InputDecoration(
+                              labelText: 'Category',
+                              border: OutlineInputBorder(),
+                            ),
+                            items: categories
+                                .map(
+                                  (c) => DropdownMenuItem(
+                                    value: c,
+                                    child: Text(c),
+                                  ),
+                                )
+                                .toList(),
+                            onChanged: (v) => setState(() => _tlCategory = v!),
+                          ),
+                        ),
+                        const SizedBox(width: 12),
+                        Expanded(
+                          child: TextFormField(
+                            controller: _tlSortController,
+                            keyboardType: TextInputType.number,
+                            decoration: const InputDecoration(
+                              labelText: 'Sort Order',
                               border: OutlineInputBorder(),
                             ),
                           ),
                         ),
                       ],
                     ),
-                    const SizedBox(height: 16),
-                    TextFormField(
-                      controller: _timelineDescController,
+                    const SizedBox(height: 14),
+
+                    // Icon
+                    DropdownButtonFormField<String>(
+                      value: _tlIconName,
                       decoration: const InputDecoration(
-                        labelText: 'Description',
+                        labelText: 'Icon',
+                        border: OutlineInputBorder(),
+                      ),
+                      items: icons
+                          .map(
+                            (ic) =>
+                                DropdownMenuItem(value: ic, child: Text(ic)),
+                          )
+                          .toList(),
+                      onChanged: (v) => setState(() => _tlIconName = v!),
+                    ),
+                    const SizedBox(height: 14),
+
+                    // Link URL + Label
+                    TextFormField(
+                      controller: _tlLinkUrlController,
+                      decoration: const InputDecoration(
+                        labelText: 'Action Link URL (optional)',
+                        hintText: 'https://admission.uod.ac.in',
+                        border: OutlineInputBorder(),
+                        prefixIcon: Icon(LucideIcons.link, size: 16),
+                      ),
+                    ),
+                    const SizedBox(height: 10),
+                    TextFormField(
+                      controller: _tlLinkLabelController,
+                      decoration: const InputDecoration(
+                        labelText: 'Link Button Label (optional)',
+                        hintText: 'Apply Now',
                         border: OutlineInputBorder(),
                       ),
                     ),
-                    const SizedBox(height: 16),
-                    TextFormField(
-                      controller: _timelineSortController,
-                      keyboardType: TextInputType.number,
-                      decoration: const InputDecoration(
-                        labelText: 'Sort Order (0, 1, 2...)',
-                        border: OutlineInputBorder(),
+                    const SizedBox(height: 14),
+
+                    // Is Important toggle
+                    SwitchListTile(
+                      title: Text(
+                        'Mark as Important',
+                        style: GoogleFonts.outfit(fontWeight: FontWeight.w600),
                       ),
+                      subtitle: Text(
+                        'Shows red badge on student timeline',
+                        style: GoogleFonts.outfit(
+                          fontSize: 12,
+                          color: Colors.grey,
+                        ),
+                      ),
+                      value: _tlIsImportant,
+                      activeColor: Colors.red,
+                      onChanged: (v) => setState(() => _tlIsImportant = v),
+                      contentPadding: EdgeInsets.zero,
                     ),
-                    const SizedBox(height: 24),
+
+                    const SizedBox(height: 20),
+
+                    // Submit button
                     SizedBox(
                       width: double.infinity,
                       height: 50,
                       child: ElevatedButton.icon(
                         onPressed: _isPublishingTimeline
                             ? null
-                            : _publishTimelineEvent,
+                            : _saveTimelineEvent,
                         icon: _isPublishingTimeline
                             ? const SizedBox(
-                                width: 20,
-                                height: 20,
+                                width: 18,
+                                height: 18,
                                 child: CircularProgressIndicator(
                                   strokeWidth: 2,
+                                  color: Colors.white,
                                 ),
                               )
-                            : const Icon(LucideIcons.calendarPlus),
+                            : Icon(
+                                _editingEventId != null
+                                    ? LucideIcons.save
+                                    : LucideIcons.calendarPlus,
+                              ),
                         label: Text(
-                          _isPublishingTimeline ? 'Adding...' : 'Add Event',
+                          _isPublishingTimeline
+                              ? 'Saving...'
+                              : _editingEventId != null
+                              ? 'Update Event'
+                              : 'Add Event',
+                          style: GoogleFonts.outfit(
+                            fontWeight: FontWeight.bold,
+                          ),
+                        ),
+                        style: ElevatedButton.styleFrom(
+                          shape: RoundedRectangleBorder(
+                            borderRadius: BorderRadius.circular(12),
+                          ),
                         ),
                       ),
                     ),
@@ -1383,141 +1720,202 @@ class _AdminDashboardState extends State<AdminDashboard>
 
           const SizedBox(height: 32),
           const Divider(),
-          const SizedBox(height: 24),
-          Text(
-            'Configure CSAS Target Deadlines',
-            style: GoogleFonts.outfit(
-              fontSize: 20,
-              fontWeight: FontWeight.bold,
-            ),
-          ),
-          const SizedBox(height: 6),
-          Text(
-            'Modify the real-time countdown targets shown to students across all tracker checkpoints.',
-            style: GoogleFonts.outfit(fontSize: 13, color: Colors.grey),
-          ),
           const SizedBox(height: 16),
-          Card(
-            child: Padding(
-              padding: const EdgeInsets.all(20),
-              child: Column(
-                children: [
-                  TextFormField(
-                    controller: _trackerP1Controller,
-                    decoration: const InputDecoration(
-                      labelText:
-                          'Phase 1 Target Deadline (YYYY-MM-DD HH:MM:SS)',
-                      border: OutlineInputBorder(),
-                      prefixIcon: Icon(LucideIcons.calendar),
-                    ),
-                  ),
-                  const SizedBox(height: 16),
-                  TextFormField(
-                    controller: _trackerP2Controller,
-                    decoration: const InputDecoration(
-                      labelText:
-                          'Phase 2 Target Deadline (YYYY-MM-DD HH:MM:SS)',
-                      border: OutlineInputBorder(),
-                      prefixIcon: Icon(LucideIcons.calendar),
-                    ),
-                  ),
-                  const SizedBox(height: 16),
-                  TextFormField(
-                    controller: _trackerP3Controller,
-                    decoration: const InputDecoration(
-                      labelText:
-                          'Phase 3 Target Deadline (YYYY-MM-DD HH:MM:SS)',
-                      border: OutlineInputBorder(),
-                      prefixIcon: Icon(LucideIcons.calendar),
-                    ),
-                  ),
-                  const SizedBox(height: 24),
-                  SizedBox(
-                    width: double.infinity,
-                    height: 50,
-                    child: ElevatedButton.icon(
-                      onPressed: _isSavingDeadlines
-                          ? null
-                          : () async {
-                              setState(() => _isSavingDeadlines = true);
-                              try {
-                                final p1 = DateTime.parse(
-                                  _trackerP1Controller.text.trim(),
-                                );
-                                final p2 = DateTime.parse(
-                                  _trackerP2Controller.text.trim(),
-                                );
-                                final p3 = DateTime.parse(
-                                  _trackerP3Controller.text.trim(),
-                                );
 
-                                final success =
-                                    await Provider.of<DuTrackerProvider>(
-                                      context,
-                                      listen: false,
-                                    ).updateDeadlines(p1: p1, p2: p2, p3: p3);
-
-                                if (mounted) {
-                                  ScaffoldMessenger.of(context).showSnackBar(
-                                    SnackBar(
-                                      content: Text(
-                                        success
-                                            ? 'Admissions deadlines synced & updated successfully!'
-                                            : 'Updated locally (Supabase table connection skipped).',
-                                      ),
-                                      backgroundColor: success
-                                          ? Colors.green
-                                          : Colors.orange,
-                                      behavior: SnackBarBehavior.floating,
-                                    ),
-                                  );
-                                }
-                              } catch (e) {
-                                ScaffoldMessenger.of(context).showSnackBar(
-                                  SnackBar(
-                                    content: Text(
-                                      'Invalid Date/Time Format: ${e.toString()}',
-                                    ),
-                                    backgroundColor: Colors.red,
-                                    behavior: SnackBarBehavior.floating,
-                                  ),
-                                );
-                              } finally {
-                                if (mounted) {
-                                  setState(() => _isSavingDeadlines = false);
-                                }
-                              }
-                            },
-                      icon: _isSavingDeadlines
-                          ? const SizedBox(
-                              width: 20,
-                              height: 20,
-                              child: CircularProgressIndicator(
-                                strokeWidth: 2,
-                                color: Colors.white,
-                              ),
-                            )
-                          : const Icon(LucideIcons.save),
-                      label: Text(
-                        _isSavingDeadlines
-                            ? 'Saving & Syncing...'
-                            : 'Save & Sync Target Deadlines',
-                        style: GoogleFonts.outfit(fontWeight: FontWeight.bold),
-                      ),
-                      style: ElevatedButton.styleFrom(
-                        backgroundColor: theme.colorScheme.primary,
-                        foregroundColor: Colors.white,
-                        shape: RoundedRectangleBorder(
-                          borderRadius: BorderRadius.circular(12),
-                        ),
-                      ),
-                    ),
-                  ),
-                ],
+          // ── EVENTS LIST ───────────────────────────────────────────────────
+          Row(
+            children: [
+              Text(
+                'All Events (${_allTimelineEvents.length})',
+                style: GoogleFonts.outfit(
+                  fontSize: 18,
+                  fontWeight: FontWeight.bold,
+                ),
               ),
-            ),
+              const Spacer(),
+              IconButton(
+                icon: const Icon(LucideIcons.refreshCw, size: 18),
+                onPressed: _loadTimelineEvents,
+                tooltip: 'Refresh',
+              ),
+            ],
           ),
+          const SizedBox(height: 12),
+
+          if (_loadingTimelineEvents)
+            const Center(child: CircularProgressIndicator())
+          else if (_allTimelineEvents.isEmpty)
+            Center(
+              child: Padding(
+                padding: const EdgeInsets.all(32),
+                child: Text(
+                  'No events yet. Add one above.',
+                  style: GoogleFonts.outfit(color: Colors.grey),
+                ),
+              ),
+            )
+          else
+            ListView.builder(
+              shrinkWrap: true,
+              physics: const NeverScrollableScrollPhysics(),
+              itemCount: _allTimelineEvents.length,
+              itemBuilder: (ctx, i) {
+                final e = _allTimelineEvents[i];
+                final id = e['id'] as int;
+                final isCompleted = e['is_completed'] as bool? ?? false;
+                final isActive = e['is_active'] as bool? ?? true;
+                final isImportant = e['is_important'] as bool? ?? false;
+
+                return Card(
+                  margin: const EdgeInsets.only(bottom: 10),
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(14),
+                  ),
+                  child: Padding(
+                    padding: const EdgeInsets.all(14),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        // Title row
+                        Row(
+                          children: [
+                            Expanded(
+                              child: Column(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                children: [
+                                  Text(
+                                    e['title'] ?? '',
+                                    style: GoogleFonts.outfit(
+                                      fontWeight: FontWeight.bold,
+                                      fontSize: 15,
+                                    ),
+                                  ),
+                                  const SizedBox(height: 2),
+                                  Text(
+                                    '${e['event_date'] ?? ''}'
+                                    '${(e['event_time'] ?? '').isNotEmpty ? '  ·  ${e['event_time']}' : ''}'
+                                    '  ·  Sort: ${e['sort_order'] ?? 0}',
+                                    style: GoogleFonts.outfit(
+                                      fontSize: 12,
+                                      color: Colors.grey,
+                                    ),
+                                  ),
+                                ],
+                              ),
+                            ),
+                            // Edit
+                            IconButton(
+                              icon: const Icon(
+                                LucideIcons.edit3,
+                                size: 18,
+                                color: Colors.blue,
+                              ),
+                              onPressed: () => _populateFormForEdit(e),
+                              tooltip: 'Edit',
+                            ),
+                            // Delete
+                            IconButton(
+                              icon: const Icon(
+                                LucideIcons.trash2,
+                                size: 18,
+                                color: Colors.red,
+                              ),
+                              onPressed: () => _deleteTimelineEvent(id),
+                              tooltip: 'Delete',
+                            ),
+                          ],
+                        ),
+
+                        // Badges
+                        Wrap(
+                          spacing: 8,
+                          children: [
+                            _AdminBadge(
+                              e['category'] ?? 'General',
+                              Colors.blue,
+                            ),
+                            if (isImportant)
+                              _AdminBadge('Important', Colors.red),
+                          ],
+                        ),
+                        const SizedBox(height: 10),
+
+                        // Toggles
+                        Row(
+                          children: [
+                            // Completed toggle
+                            _ToggleChip(
+                              label: 'Completed',
+                              value: isCompleted,
+                              activeColor: Colors.green,
+                              onChanged: (v) =>
+                                  _toggleEventField(id, 'is_completed', v),
+                            ),
+                            const SizedBox(width: 10),
+                            // Active/Draft toggle
+                            _ToggleChip(
+                              label: isActive ? 'Live' : 'Draft',
+                              value: isActive,
+                              activeColor: Colors.blue,
+                              onChanged: (v) =>
+                                  _toggleEventField(id, 'is_active', v),
+                            ),
+                          ],
+                        ),
+
+                        // Link info
+                        if ((e['link_url'] ?? '').isNotEmpty)
+                          Padding(
+                            padding: const EdgeInsets.only(top: 8),
+                            child: Row(
+                              children: [
+                                const Icon(
+                                  LucideIcons.link,
+                                  size: 12,
+                                  color: Colors.grey,
+                                ),
+                                const SizedBox(width: 4),
+                                Expanded(
+                                  child: Text(
+                                    e['link_url'] ?? '',
+                                    style: GoogleFonts.outfit(
+                                      fontSize: 11,
+                                      color: Colors.grey,
+                                    ),
+                                    maxLines: 1,
+                                    overflow: TextOverflow.ellipsis,
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ),
+                      ],
+                    ),
+                  ),
+                );
+              },
+            ),
         ],
+      ),
+    );
+  }
+
+  // ── Small helper widgets ──────────────────────────────────────────────────────
+
+  Widget _AdminBadge(String label, Color color) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+      decoration: BoxDecoration(
+        color: color.withOpacity(0.1),
+        borderRadius: BorderRadius.circular(100),
+      ),
+      child: Text(
+        label,
+        style: GoogleFonts.outfit(
+          fontSize: 10,
+          fontWeight: FontWeight.w700,
+          color: color,
+        ),
       ),
     );
   }
@@ -2836,6 +3234,55 @@ class _AdminDashboardState extends State<AdminDashboard>
                   },
                 ),
         ],
+      ),
+    );
+  }
+}
+
+class _ToggleChip extends StatelessWidget {
+  final String label;
+  final bool value;
+  final Color activeColor;
+  final void Function(bool) onChanged;
+
+  const _ToggleChip({
+    required this.label,
+    required this.value,
+    required this.activeColor,
+    required this.onChanged,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return GestureDetector(
+      onTap: () => onChanged(!value),
+      child: AnimatedContainer(
+        duration: const Duration(milliseconds: 200),
+        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+        decoration: BoxDecoration(
+          color: value ? activeColor.withOpacity(0.1) : Colors.grey.shade100,
+          borderRadius: BorderRadius.circular(100),
+          border: Border.all(color: value ? activeColor : Colors.grey.shade300),
+        ),
+        child: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Icon(
+              value ? LucideIcons.checkCircle2 : LucideIcons.circle,
+              size: 12,
+              color: value ? activeColor : Colors.grey,
+            ),
+            const SizedBox(width: 5),
+            Text(
+              label,
+              style: GoogleFonts.outfit(
+                fontSize: 12,
+                fontWeight: FontWeight.w600,
+                color: value ? activeColor : Colors.grey,
+              ),
+            ),
+          ],
+        ),
       ),
     );
   }
