@@ -1,1 +1,15 @@
-Enter a domain to generate a JSON file
+[
+  {
+    "relation": [
+      "delegate_permission/common.handle_all_urls",
+      "delegate_permission/common.get_login_creds"
+    ],
+    "target": {
+      "namespace": "android_app",
+      "package_name": "net.collegemitra.cuet",
+      "sha256_cert_fingerprints": [
+        "33:4A:DD:C8:41:5B:4A:D3:13:28:73:6E:F9:94:7B:30:25:4F:9C:C4:71:83:85:3C:3C:FC:D7:29:6C:3D:F6:A7"
+      ]
+    }
+  }
+]
